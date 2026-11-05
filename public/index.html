@@ -2497,9 +2497,6 @@
                 ${isIsolated ? '<i class="fa-solid fa-play text-[10px] mr-1"></i> Buka Isolir' : '<i class="fa-solid fa-ban text-[10px] mr-1"></i> Isolir'}
               </button>
               <div class="flex items-center space-x-1">
-                <button onclick="sendManualWA(${c.id}, '${c.name}', '${c.phone}')" class="w-7 h-7 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 inline-flex items-center justify-center transition active:scale-95" title="Kirim Tagihan WhatsApp">
-                  <i class="fa-brands fa-whatsapp text-xs"></i>
-                </button>
                 <button onclick="openEditModal(${c.id})" class="w-7 h-7 rounded-lg bg-sky-500/10 hover:bg-sky-500/25 text-sky-400 border border-sky-500/30 inline-flex items-center justify-center transition active:scale-95" title="Edit Lengkap Pelanggan">
                   <i class="fa-solid fa-user-pen text-[10px]"></i>
                 </button>
@@ -2584,9 +2581,6 @@
           <div class="flex items-center gap-1.5 pt-2 border-t border-brand-border/50">
             <button onclick="confirmToggleStatus(${c.id}, '${c.pppoe_username}', ${isIsolated})" class="flex-1 py-2 rounded-xl text-xs font-bold border ${isIsolated ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500/40 active:bg-emerald-600/30' : 'bg-rose-600/20 text-rose-300 border-rose-500/40 active:bg-rose-600/30'} transition active:scale-95 flex items-center justify-center gap-1">
               ${isIsolated ? '<i class="fa-solid fa-play text-[10px]"></i> Buka Isolir' : '<i class="fa-solid fa-ban text-[10px]"></i> Isolir'}
-            </button>
-            <button onclick="sendManualWA(${c.id}, '${c.name}', '${c.phone}')" class="w-9 h-9 rounded-xl bg-emerald-500/10 active:bg-emerald-500/25 text-emerald-400 border border-emerald-500/30 flex items-center justify-center transition active:scale-95 shrink-0" title="Kirim WA">
-              <i class="fa-brands fa-whatsapp text-sm"></i>
             </button>
             <button onclick="openEditModal(${c.id})" class="w-9 h-9 rounded-xl bg-sky-500/10 active:bg-sky-500/25 text-sky-400 border border-sky-500/30 flex items-center justify-center transition active:scale-95 shrink-0" title="Edit Lengkap">
               <i class="fa-solid fa-user-pen text-xs"></i>
