@@ -557,6 +557,257 @@ app.post('/api/admin/promo-template', (req, res) => {
   res.json({ success: true, message: 'Template promosi & info LenxyNet berhasil disimpan!' });
 });
 
+// === FITUR WHATSAPP GLOBAL & BROADCAST (Pemberitahuan, Promo, Filter Target) ===
+
+app.get('/api/admin/whatsapp/target-preview', requireAdminAuth, (req, res) => {
+  try {
+    const { target = 'all', customerId } = req.query;
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    let recipients = [];
+
+    if (target === 'single') {
+      if (customerId) {
+        recipients = db.prepare(`
+          SELECT c.id, c.name, c.phone, c.pppoe_username, c.due_date, c.status,
+                 p.name as plan_name, p.price as plan_price,
+                 b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+          FROM customers c
+          LEFT JOIN plans p ON c.plan_id = p.id
+          LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+          WHERE c.id = ?
+        `).all(currentPeriod, customerId);
+      }
+    } else if (target === 'unpaid') {
+      recipients = db.prepare(`
+        SELECT c.id, c.name, c.phone, c.pppoe_username, c.due_date, c.status,
+               p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+          AND (b.status IS NULL OR b.status != 'paid')
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else if (target === 'paid') {
+      recipients = db.prepare(`
+        SELECT c.id, c.name, c.phone, c.pppoe_username, c.due_date, c.status,
+               p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        INNER JOIN bills b ON c.id = b.customer_id AND b.period = ? AND b.status = 'paid'
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else if (target === 'isolated') {
+      recipients = db.prepare(`
+        SELECT c.id, c.name, c.phone, c.pppoe_username, c.due_date, c.status,
+               p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+          AND c.status = 'isolated'
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else if (target === 'active') {
+      recipients = db.prepare(`
+        SELECT c.id, c.name, c.phone, c.pppoe_username, c.due_date, c.status,
+               p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+          AND (c.status IS NULL OR c.status = 'active')
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else {
+      recipients = db.prepare(`
+        SELECT c.id, c.name, c.phone, c.pppoe_username, c.due_date, c.status,
+               p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    }
+
+    res.json({
+      success: true,
+      target,
+      count: recipients.length,
+      recipients: recipients.map(r => ({
+        id: r.id,
+        name: r.name,
+        phone: r.phone,
+        pppoe_username: r.pppoe_username,
+        plan_name: r.plan_name || 'Internet PPPoE',
+        status: r.status || 'active',
+        bill_status: r.bill_status || 'unpaid'
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/admin/whatsapp/send-broadcast', requireAdminAuth, async (req, res) => {
+  try {
+    const waStatus = getWAStatus();
+    if (waStatus.status !== 'connected') {
+      return res.status(400).json({
+        success: false,
+        error: 'Bot WhatsApp belum terhubung. Silakan buka menu WhatsApp di dashboard dan scan QR code terlebih dahulu.'
+      });
+    }
+
+    const { target = 'all', customerId, category = 'notice', messageTemplate = '' } = req.body;
+    if (!messageTemplate || !messageTemplate.trim()) {
+      return res.status(400).json({ success: false, error: 'Isi pesan WhatsApp tidak boleh kosong!' });
+    }
+
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    let recipients = [];
+
+    if (target === 'single') {
+      if (!customerId) return res.status(400).json({ success: false, error: 'Pilih pelanggan target terlebih dahulu!' });
+      recipients = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.id = ?
+      `).all(currentPeriod, customerId);
+    } else if (target === 'unpaid') {
+      recipients = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+          AND (b.status IS NULL OR b.status != 'paid')
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else if (target === 'paid') {
+      recipients = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        INNER JOIN bills b ON c.id = b.customer_id AND b.period = ? AND b.status = 'paid'
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else if (target === 'isolated') {
+      recipients = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+          AND c.status = 'isolated'
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else if (target === 'active') {
+      recipients = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+          AND (c.status IS NULL OR c.status = 'active')
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    } else {
+      recipients = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.price as plan_price,
+               b.amount as bill_amount, b.status as bill_status, b.period as bill_period
+        FROM customers c
+        LEFT JOIN plans p ON c.plan_id = p.id
+        LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
+        WHERE c.phone IS NOT NULL AND c.phone != '' AND c.phone != '-'
+        ORDER BY c.name ASC
+      `).all(currentPeriod);
+    }
+
+    if (!recipients.length) {
+      return res.status(400).json({ success: false, error: 'Tidak ada pelanggan yang cocok dengan filter target atau nomor WhatsApp belum terisi.' });
+    }
+
+    const allPlans = db.prepare("SELECT name, speed, price FROM plans WHERE name NOT IN ('default', 'default-encryption')").all();
+    const plansListText = allPlans.map(p => `• *${p.name}* (${p.speed}) - Rp ${Number(p.price).toLocaleString('id-ID')}/bln`).join('\n') || '• Paket LenxyNet Fiber';
+
+    const baseUrl = getPortalBaseUrl(req);
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < recipients.length; i++) {
+      const c = recipients[i];
+      if (!c.phone || c.phone === '-' || c.phone === 'null') {
+        failedCount++;
+        continue;
+      }
+
+      const phoneParam = (c.phone && c.phone !== '-') ? c.phone : c.pppoe_username;
+      const portalUrl = `${baseUrl}/user.html?phone=${encodeURIComponent(phoneParam)}`;
+      const amountVal = c.bill_amount || c.plan_price || 150000;
+      const nominalStr = `Rp ${Number(amountVal).toLocaleString('id-ID')}`;
+
+      let personalizedMsg = messageTemplate
+        .replace(/{nama}/gi, c.name || 'Pelanggan')
+        .replace(/{name}/gi, c.name || 'Pelanggan')
+        .replace(/{username}/gi, c.pppoe_username || '-')
+        .replace(/{phone}/gi, c.phone || '-')
+        .replace(/{paket}/gi, c.plan_name || 'Internet PPPoE')
+        .replace(/{jatuh_tempo}/gi, `Tgl ${c.due_date || 1}`)
+        .replace(/{nominal}/gi, nominalStr)
+        .replace(/{portal_url}/gi, portalUrl)
+        .replace(/{plans}/gi, plansListText);
+
+      const sendRes = await sendWhatsAppMessage(c.phone, personalizedMsg);
+      if (sendRes && sendRes.success) {
+        sentCount++;
+      } else {
+        failedCount++;
+        errors.push(`${c.name} (${c.phone}): ${sendRes?.error || 'Gagal'}`);
+      }
+
+      // Safe Delay 1.5 detik per pesan agar anti-banned / tidak terkena limit spam WhatsApp
+      if (i < recipients.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+
+    const catLabel = category === 'promo' ? 'Promosi & Penawaran' : 'Pemberitahuan / Gangguan';
+    logActivity('WHATSAPP', `Broadcast WA (${catLabel}) selesai: ${sentCount} berhasil, ${failedCount} gagal (Target: ${target})`, 'ADMIN');
+
+    res.json({
+      success: true,
+      message: `Pesan broadcast WhatsApp berhasil diproses! Terkirim: ${sentCount}, Gagal: ${failedCount}`,
+      total: recipients.length,
+      sentCount,
+      failedCount,
+      errors
+    });
+  } catch (err) {
+    console.error('[Broadcast WA Error]:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Kirim WA Manual per User dari Dashboard (Bisa by Customer ID atau PPPoE Username)
 app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
   if (!isMikrotikConnected()) {

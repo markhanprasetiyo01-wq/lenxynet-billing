@@ -144,6 +144,12 @@
           <span id="wa-text" class="text-amber-400 font-semibold">Memeriksa...</span>
         </button>
 
+        <!-- Tombol Broadcast WA Global -->
+        <button onclick="openGlobalWAModal('all')" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-emerald-600/15 hover:bg-emerald-600/25 border border-emerald-500/30 text-xs text-emerald-300 transition active:scale-95" title="Kirim Pesan WhatsApp Global & Broadcast">
+          <i class="fa-brands fa-whatsapp text-emerald-400 text-sm"></i>
+          <span class="font-semibold">Kirim WA Global</span>
+        </button>
+
         <!-- MikroTik IP Status & Settings Button -->
         <button onclick="openRouterSettingsModal()" id="router-status-btn" class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 group" title="Pengaturan Koneksi MikroTik">
           <span id="router-status-dot" class="w-2 h-2 rounded-full bg-rose-500"></span>
@@ -226,6 +232,11 @@
 
       <!-- Action Links & Settings -->
       <div class="pt-2 border-t border-brand-border/60 space-y-1.5 text-xs">
+        <button onclick="openGlobalWAModal('all'); toggleMobileNav();" class="w-full px-3 py-2.5 rounded-xl bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 flex items-center justify-between transition">
+          <span class="flex items-center gap-2.5"><i class="fa-brands fa-whatsapp text-emerald-400 text-base"></i> Kirim WhatsApp Global / Broadcast</span>
+          <i class="fa-solid fa-chevron-right text-[10px] text-emerald-400/60"></i>
+        </button>
+
         <button onclick="openRouterSettingsModal(); toggleMobileNav();" class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
           <span class="flex items-center gap-2.5"><i class="fa-solid fa-server text-sky-400 text-sm"></i> Pengaturan Koneksi MikroTik</span>
           <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
@@ -397,6 +408,9 @@
         </div>
 
         <div class="flex items-center space-x-2">
+          <button onclick="openGlobalWAModal('all')" class="flex-1 sm:flex-initial px-3 sm:px-3.5 py-2 bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95" title="Kirim WhatsApp Broadcast / Global">
+            <i class="fa-brands fa-whatsapp text-sm text-emerald-400"></i> <span class="hidden sm:inline">Kirim</span> WA Global
+          </button>
           <button id="btn-autoisolir" onclick="triggerAutoIsolir()" class="flex-1 sm:flex-initial px-3 sm:px-3.5 py-2 bg-rose-600/15 hover:bg-rose-600/25 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95" title="Jalankan pengecekan jatuh tempo dan isolir pelanggan yang telat">
             <i class="fa-solid fa-bolt text-[11px]" id="isolir-icon"></i> <span class="hidden sm:inline">Jalankan</span> Cek Isolir
           </button>
@@ -889,17 +903,19 @@
     </div>
   </div>
 
-  <!-- Modal Pilih Kirim WA Manual -->
-  <div id="sendWAModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-    <div class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-md p-5 shadow-2xl modal-enter relative">
-      <div class="flex items-center justify-between pb-3 border-b border-brand-border">
+  <!-- Modal WhatsApp Global & Broadcast (Pemberitahuan, Promo, Target Filter) -->
+  <div id="sendWAModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+    <div class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-xl p-5 sm:p-6 shadow-2xl modal-enter relative max-h-[92vh] overflow-y-auto space-y-4">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-brand-border/80">
         <div class="flex items-center space-x-2.5">
-          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-            <i class="fa-brands fa-whatsapp text-base"></i>
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">
+            <i class="fa-brands fa-whatsapp"></i>
           </div>
           <div>
-            <h3 class="text-sm font-bold text-white">Kirim Pesan WhatsApp</h3>
-            <p id="wa-target-name" class="text-[11px] text-slate-400 font-mono">Kepada: -</p>
+            <h3 class="text-sm font-bold text-white">Kirim Pesan WhatsApp & Broadcast Global</h3>
+            <p class="text-[11px] text-slate-400">Pemberitahuan gangguan/maintenance & promosi paket ke pelanggan</p>
           </div>
         </div>
         <button onclick="closeSendWAModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition">
@@ -907,72 +923,202 @@
         </button>
       </div>
 
-      <div class="mt-4 space-y-3 text-xs">
-        <!-- Opsi 1: Pembayaran Cash Manual (Auto-Enable & Multi-Bulan) -->
-        <div class="p-3.5 rounded-xl bg-slate-900/90 border border-brand-border space-y-2.5">
-          <div class="flex items-center justify-between">
-            <div class="font-bold text-white flex items-center gap-1.5">
-              <i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
-              <span>Bayar Cash / Tunai (Kasir)</span>
-              <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">Auto-Enable</span>
-            </div>
-          </div>
-          
-          <div class="flex items-center space-x-2">
-            <label class="text-[11px] text-slate-400 shrink-0 font-medium">Durasi Bayar:</label>
-            <select id="cash-duration-months" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 font-semibold">
-              <option value="1">1 Bulan</option>
-              <option value="2">2 Bulan Sekaligus</option>
-              <option value="3">3 Bulan Sekaligus</option>
-              <option value="6">6 Bulan Sekaligus</option>
-              <option value="12">12 Bulan (1 Tahun)</option>
-            </select>
-          </div>
-
-          <p class="text-[10px] text-slate-400">
-            Catat lunas otomatis untuk periode yang dipilih, aktifkan (enable) akun di MikroTik & kirim bukti bayar resmi ke WhatsApp.
-          </p>
-
-          <button onclick="executeSendWA('lunas')" class="w-full py-2 rounded-xl font-bold bg-emerald-600/20 hover:bg-emerald-600 text-emerald-300 hover:text-white border border-emerald-500/40 transition flex items-center justify-center gap-1.5 active:scale-95">
-            <i class="fa-solid fa-money-bill-wave text-emerald-400"></i> Catat Lunas & Kirim Bukti WA
+      <!-- Section 1: Target Penerima -->
+      <div class="space-y-2 text-xs">
+        <label class="block font-semibold text-slate-300">
+          Target Penerima Pesan:
+        </label>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+          <button type="button" onclick="setWATarget('all')" id="btn-target-all" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-emerald-500/50 transition flex items-center gap-2">
+            <i class="fa-solid fa-users text-emerald-400 text-xs"></i>
+            <span class="truncate">Semua Pelanggan</span>
+          </button>
+          <button type="button" onclick="setWATarget('unpaid')" id="btn-target-unpaid" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-amber-500/50 transition flex items-center gap-2">
+            <i class="fa-solid fa-clock text-amber-400 text-xs"></i>
+            <span class="truncate">Belum Bayar</span>
+          </button>
+          <button type="button" onclick="setWATarget('paid')" id="btn-target-paid" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-emerald-500/50 transition flex items-center gap-2">
+            <i class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
+            <span class="truncate">Sudah Bayar</span>
+          </button>
+          <button type="button" onclick="setWATarget('isolated')" id="btn-target-isolated" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-rose-500/50 transition flex items-center gap-2">
+            <i class="fa-solid fa-ban text-rose-400 text-xs"></i>
+            <span class="truncate">Terisolir</span>
+          </button>
+          <button type="button" onclick="setWATarget('active')" id="btn-target-active" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-sky-500/50 transition flex items-center gap-2">
+            <i class="fa-solid fa-wifi text-sky-400 text-xs"></i>
+            <span class="truncate">Tidak Terisolir</span>
+          </button>
+          <button type="button" onclick="setWATarget('single')" id="btn-target-single" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-purple-500/50 transition flex items-center gap-2">
+            <i class="fa-solid fa-user text-purple-400 text-xs"></i>
+            <span class="truncate">Orang Tertentu</span>
           </button>
         </div>
 
-        <!-- Opsi 2: Info & Promo LenxyNet (Customable) -->
-        <div class="p-3.5 rounded-xl bg-slate-900/90 border border-brand-border space-y-2.5">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-              <i class="fa-solid fa-bullhorn text-sky-400"></i>
-              <span class="font-bold text-white">Info & Promo Paket LenxyNet</span>
-            </div>
-            <button onclick="toggleEditPromo()" id="btn-toggle-promo-edit" class="text-[10px] text-sky-400 hover:text-sky-300 font-medium">
-              <i class="fa-solid fa-pen-to-square"></i> Edit Teks Promo
-            </button>
-          </div>
-          
-          <div id="promo-editor-area" class="hidden space-y-2">
-            <p class="text-[10px] text-slate-400">Variabel: <code class="text-sky-300">{name}</code>, <code class="text-sky-300">{plans}</code> (Daftar paket), <code class="text-sky-300">{portal_url}</code></p>
-            <textarea id="promo-custom-text" rows="5" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-[11px] text-slate-200 font-mono focus:outline-none focus:border-sky-400"></textarea>
-            <div class="flex justify-end space-x-2">
-              <button onclick="savePromoTemplate()" class="px-2.5 py-1 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-semibold text-[10px] transition">
-                Simpan Sebagai Default
-              </button>
-            </div>
-          </div>
+        <!-- Single Customer Dropdown (Muncul jika target 'single') -->
+        <div id="wa-single-customer-box" class="hidden mt-2 p-3 rounded-xl bg-slate-900/80 border border-brand-border space-y-1.5">
+          <label class="block font-semibold text-slate-300 text-[11px]">Pilih Pelanggan:</label>
+          <select id="wa-single-customer-select" onchange="onSingleCustomerSelected(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+            <!-- Diisi lewat JavaScript -->
+          </select>
+        </div>
 
-          <p class="text-[10px] text-slate-400">Mengirimkan informasi layanan LenxyNet, pengumuman event/promo, daftar harga paket aktif, dan tautan portal.</p>
+        <!-- Target Counter & Preview Summary Badge -->
+        <div id="wa-target-summary-box" class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2 text-slate-300">
+            <i class="fa-solid fa-bullseye text-emerald-400"></i>
+            <span>Penerima Terpilih:</span>
+            <span id="wa-target-count-badge" class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold font-mono">Memuat...</span>
+          </div>
+          <span id="wa-target-detail-text" class="text-[11px] text-slate-400 truncate max-w-[200px]">Semua pelanggan</span>
+        </div>
+      </div>
 
-          <button onclick="executeSendWA('promo')" class="w-full py-2 rounded-xl font-bold bg-sky-600/20 hover:bg-sky-600 text-sky-300 hover:text-white border border-sky-500/40 transition flex items-center justify-center gap-1.5 active:scale-95">
-            <i class="fa-brands fa-whatsapp text-sm text-emerald-400"></i> Kirim Pesan Promo & Info Sekarang
+      <!-- Mode Khusus Single: Tab Kirim Pesan vs Bayar Cash -->
+      <div id="wa-single-mode-tabs" class="hidden border-b border-brand-border/60 pb-2">
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="switchSingleMode('message')" id="btn-mode-message" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold text-xs flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-paper-plane text-[10px]"></i> Kirim Pesan WhatsApp
+          </button>
+          <button type="button" onclick="switchSingleMode('cash')" id="btn-mode-cash" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition">
+            <i class="fa-solid fa-money-bill-wave text-[10px] text-emerald-400"></i> Bayar Tunai (Kasir)
           </button>
         </div>
       </div>
 
-      <div class="pt-3 border-t border-brand-border mt-3.5 flex items-center justify-end">
-        <button onclick="closeSendWAModal()" class="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
+      <!-- Container Opsi Bayar Tunai / Cash (Hanya jika mode 'cash') -->
+      <div id="wa-cash-container" class="hidden p-3.5 rounded-xl bg-slate-900/90 border border-brand-border space-y-3 text-xs">
+        <div class="flex items-center justify-between">
+          <div class="font-bold text-white flex items-center gap-1.5">
+            <i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+            <span>Catat Bayar Tunai / Cash (Kasir)</span>
+            <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">Auto-Enable MikroTik</span>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2">
+          <label class="text-[11px] text-slate-400 shrink-0 font-medium">Durasi Bayar:</label>
+          <select id="cash-duration-months" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-400 font-semibold">
+            <option value="1">1 Bulan</option>
+            <option value="2">2 Bulan Sekaligus</option>
+            <option value="3">3 Bulan Sekaligus</option>
+            <option value="6">6 Bulan Sekaligus</option>
+            <option value="12">12 Bulan (1 Tahun)</option>
+          </select>
+        </div>
+        <p class="text-[10px] text-slate-400">
+          Catat lunas otomatis untuk periode yang dipilih, aktifkan (enable) akun PPPoE di MikroTik & kirim bukti bayar resmi ke WhatsApp pelanggan.
+        </p>
+        <button onclick="executeCashPayWA()" id="btn-cash-submit" class="w-full py-2.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-600/25 active:scale-95">
+          <i class="fa-solid fa-money-bill-wave"></i> Catat Lunas & Kirim Bukti WA Sekarang
+        </button>
+      </div>
+
+      <!-- Form Kirim Pesan WhatsApp (Broadcast / Targeted) -->
+      <div id="wa-message-container" class="space-y-3 text-xs">
+        
+        <!-- Section 2: Kategori Pesan (2 Jenis) -->
+        <div class="space-y-1.5">
+          <label class="block font-semibold text-slate-300">
+            Pilih Jenis / Kategori Pesan:
+          </label>
+          <div class="grid grid-cols-2 gap-2">
+            <!-- Jenis 1: Pemberitahuan -->
+            <button type="button" onclick="setWACategory('notice')" id="btn-cat-notice" class="p-3 rounded-xl border border-amber-500/50 bg-amber-500/10 text-left transition flex items-start gap-2.5">
+              <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                <i class="fa-solid fa-bullhorn text-xs"></i>
+              </div>
+              <div class="truncate">
+                <div class="font-bold text-amber-300 text-xs">1. Pemberitahuan</div>
+                <div class="text-[10px] text-slate-400 truncate mt-0.5">Maintenance, gangguan kabel FO, info teknis</div>
+              </div>
+            </button>
+
+            <!-- Jenis 2: Promosi -->
+            <button type="button" onclick="setWACategory('promo')" id="btn-cat-promo" class="p-3 rounded-xl border border-slate-700 bg-slate-900 text-left transition flex items-start gap-2.5 opacity-80 hover:opacity-100">
+              <div class="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 mt-0.5">
+                <i class="fa-solid fa-gift text-xs"></i>
+              </div>
+              <div class="truncate">
+                <div class="font-bold text-slate-200 text-xs">2. Promosi</div>
+                <div class="text-[10px] text-slate-400 truncate mt-0.5">Upgrade speed, hemat bayar 6 bln, diskon</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Section 3: Template Cepat Siap Pakai -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="font-semibold text-slate-300">
+              Template Cepat Siap Pakai:
+            </label>
+            <span class="text-[10px] text-slate-400">Otomatis mengisi teks di bawah</span>
+          </div>
+          <select id="wa-template-preset-select" onchange="applyWATemplatePreset(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-semibold">
+            <!-- Dinamis sesuai kategori -->
+          </select>
+        </div>
+
+        <!-- Section 4: Textarea Pesan & Placeholder Tags -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="font-semibold text-slate-300">
+              Isi Pesan WhatsApp <span class="text-rose-400">*</span>:
+            </label>
+            <span class="text-[10px] text-slate-400">Bebas diedit sesuai kebutuhan</span>
+          </div>
+
+          <textarea id="wa-broadcast-message-text" rows="7" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono leading-relaxed" placeholder="Tulis pesan WhatsApp Anda di sini..."></textarea>
+
+          <!-- Variabel Dinamis Tag Helper -->
+          <div class="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+            <div class="text-[10px] text-slate-400 flex items-center gap-1 font-semibold">
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Klik untuk sisipkan variabel otomatis ke pesan:
+            </div>
+            <div class="flex flex-wrap gap-1 text-[10px]">
+              <button type="button" onclick="insertWAPlaceholder('{nama}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Nama Pelanggan">{nama}</button>
+              <button type="button" onclick="insertWAPlaceholder('{paket}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Nama Paket">{paket}</button>
+              <button type="button" onclick="insertWAPlaceholder('{jatuh_tempo}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Tanggal Jatuh Tempo">{jatuh_tempo}</button>
+              <button type="button" onclick="insertWAPlaceholder('{nominal}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Nominal Tagihan">{nominal}</button>
+              <button type="button" onclick="insertWAPlaceholder('{portal_url}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 font-mono transition" title="Link Portal Cek Tagihan">{portal_url}</button>
+              <button type="button" onclick="insertWAPlaceholder('{plans}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-mono transition" title="Daftar Paket & Harga">{plans}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Safe Broadcast Delay Notice -->
+        <div class="p-2.5 rounded-xl bg-sky-500/5 border border-sky-500/20 text-[11px] text-slate-400 flex items-center gap-2">
+          <i class="fa-solid fa-shield-halved text-sky-400 shrink-0"></i>
+          <span><b>Anti-Banned Protection:</b> Pesan broadcast dikirim bertahap dengan jeda aman 1.5 detik per nomor agar nomor WA Anda tidak diblokir WhatsApp.</span>
+        </div>
+
+        <!-- Live Progress Status Box (Hidden saat diam) -->
+        <div id="wa-broadcast-progress-box" class="hidden p-3 rounded-xl bg-slate-900 border border-emerald-500/40 space-y-2 text-xs">
+          <div class="flex items-center justify-between font-bold text-white">
+            <span class="flex items-center gap-2"><i class="fa-solid fa-spinner fa-spin text-emerald-400"></i> <span id="wa-progress-title">Sedang mengirim broadcast...</span></span>
+            <span id="wa-progress-stats" class="text-emerald-400 font-mono">0 / 0</span>
+          </div>
+          <div class="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div id="wa-progress-bar" class="bg-gradient-to-r from-emerald-500 to-teal-400 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <p id="wa-progress-log" class="text-[11px] text-slate-400 font-mono truncate">Menghubungkan ke WhatsApp...</p>
+        </div>
+
+        <!-- Submit Button for Broadcast -->
+        <button type="button" onclick="executeSendWABroadcast()" id="btn-submit-wa-broadcast" class="w-full py-2.5 rounded-xl font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 active:scale-95 text-xs">
+          <i class="fa-brands fa-whatsapp text-sm"></i>
+          <span id="btn-submit-wa-broadcast-text">Kirim Pesan WhatsApp Sekarang</span>
+        </button>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="pt-3 border-t border-brand-border/80 flex items-center justify-between text-xs">
+        <button type="button" onclick="closeSendWAModal()" class="px-4 py-2 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 transition">
           Tutup
         </button>
       </div>
+
     </div>
   </div>
 
@@ -2787,44 +2933,154 @@
       });
     }
 
-    // Modal Kirim WA Manual per User
-    let activeSendWACustId = null;
+    // === FITUR WHATSAPP GLOBAL & BROADCAST (Pemberitahuan, Promo & Target Filter) ===
 
-    async function loadPromoTemplate() {
-      try {
-        const res = await fetch('/api/admin/promo-template');
-        const data = await res.json();
-        document.getElementById('promo-custom-text').value = data.template || '';
-      } catch (e) {}
-    }
+    const WA_PRESET_TEMPLATES = {
+      notice: [
+        {
+          id: 'maintenance',
+          title: '⚠️ 1. Maintenance Jaringan Terjadwal',
+          text: `PEMBERITAHUAN MAINTENANCE JARINGAN ⚠️
+Halo *{nama}*,
 
-    function toggleEditPromo() {
-      const area = document.getElementById('promo-editor-area');
-      const btn = document.getElementById('btn-toggle-promo-edit');
-      if (area.classList.contains('hidden')) {
-        area.classList.remove('hidden');
-        btn.innerHTML = '<i class="fa-solid fa-chevron-up"></i> Tutup Editor';
-      } else {
-        area.classList.add('hidden');
-        btn.innerHTML = '<i class="fa-solid fa-pen-to-square"></i> Edit Teks Promo';
-      }
-    }
+Diberitahukan bahwa tim teknis *LenxyNet* akan melakukan pemeliharaan rutin jaringan untuk meningkatkan stabilitas dan kecepatan koneksi:
 
-    async function savePromoTemplate() {
-      const template = document.getElementById('promo-custom-text').value;
-      try {
-        const res = await fetch('/api/admin/promo-template', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ template })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          showToast('Template promosi berhasil disimpan!', 'success');
+📅 *Jadwal Pemeliharaan:*
+• Waktu: *Malam ini, Pukul 01:00 - 04:00 WIB*
+• Dampak: *Koneksi internet akan terputus sementara waktu*
+
+Koneksi internet akan kembali normal otomatis setelah proses selesai. Kami memohon maaf atas ketidaknyamanan yang terjadi.
+
+_Terima kasih atas perhatian dan kerja samanya._
+*Tim Teknis LenxyNet Fiber*`
+        },
+        {
+          id: 'gangguan',
+          title: '🚨 2. Gangguan Kabel FO / Kendala Teknis',
+          text: `INFORMASI GANGGUAN KONEKSI INTERNET ⚠️
+Kepada Yth. *{nama}*,
+
+Kami informasikan bahwa saat ini sedang terjadi kendala teknis / pemutusan kabel FO utama yang mempengaruhi koneksi internet di wilayah Anda.
+
+🛠️ *Status Penanganan:*
+Tim teknisi saat ini sudah berada di lokasi lapangan dan sedang berupaya melakukan perbaikan secepat mungkin.
+
+Kami mohon maaf yang sebesar-besarnya atas ketidaknyamanan aktivitas internet Anda. Pembaruan informasi akan kami sampaikan secara berkala.
+
+_Layanan Pelanggan LenxyNet_`
+        },
+        {
+          id: 'pengumuman',
+          title: '📢 3. Pengumuman Umum Layanan',
+          text: `PENGUMUMAN LAYANAN LENXYNET 📢
+Halo *{nama}*,
+
+Informasi penting bagi seluruh pelanggan *LenxyNet Fiber*:
+
+Kami terus berkomitmen memberikan layanan internet terbaik untuk Anda. Untuk mengecek status langganan, paket aktif, dan info pembayaran, silakan kunjungi:
+👉 {portal_url}
+
+Jika Anda mengalami kendala atau membutuhkan bantuan teknis, jangan ragu untuk menghubungi layanan support kami.
+
+_Salam hangat, Manajemen LenxyNet_`
+        },
+        {
+          id: 'custom',
+          title: '✏️ Tulis Pesan Kustom Sendiri',
+          text: `Halo *{nama}*, 
+
+[Tuliskan pengumuman atau pemberitahuan Anda di sini...]
+
+Cek info langganan Anda di:
+👉 {portal_url}
+
+_Tim LenxyNet Fiber_`
         }
-      } catch (e) {
-        showToast('Gagal menyimpan template promosi', 'error');
-      }
+      ],
+      promo: [
+        {
+          id: 'upgrade',
+          title: '🚀 1. Promo Upgrade Kecepatan Internet',
+          text: `PROMO SPESIAL UPGRADE KECEPATAN! 🚀
+Halo *{nama}*,
+
+Rasakan pengalaman internet super kencang tanpa hambatan! Nikmati penawaran khusus upgrade paket internet *LenxyNet Fiber*:
+
+📦 *Pilihan Paket Kecepatan Tinggi:*
+{plans}
+
+🎉 Kecepatan lebih kencang untuk streaming 4K, meeting lancar, dan gaming anti-lag bersama keluarga!
+
+Hubungi Admin kami sekarang atau cek detail di portal:
+👉 {portal_url}
+
+_LenxyNet - Internet Cepat & Stabil_`
+        },
+        {
+          id: 'diskon',
+          title: '🎁 2. Promo Hemat Bayar Di Muka (6 & 12 Bulan)',
+          text: `PROMO HEMAT LANGGANAN LENXYNET! 🎁
+Halo *{nama}*,
+
+Mau internetan lebih hemat tanpa repot bayar tiap bulan?
+Ambil promo bayar di muka sekarang juga:
+
+✨ *Bayar 6 Bulan*: *Gratis 1 Bulan Langganan!*
+✨ *Bayar 12 Bulan*: *Gratis 2 Bulan Langganan!*
+
+Promo terbatas untuk pelanggan setia *LenxyNet*. Amankan promonya sekarang dengan menghubungi admin kami atau bayar langsung via QRIS:
+👉 {portal_url}
+
+_LenxyNet Fiber_`
+        },
+        {
+          id: 'referral',
+          title: '🤝 3. Promo Ajak Tetangga (Bonus Potongan Tagihan)',
+          text: `AJAK TETANGGA & DAPATKAN BONUS! 🤝
+Halo *{nama}*,
+
+Puas dengan koneksi internet *LenxyNet*? Ajak tetangga atau kerabat Anda untuk pasang Wi-Fi LenxyNet!
+
+🎁 *Dapatkan Bonus Potongan Tagihan Rp 25.000* untuk setiap 1 orang teman yang berhasil terpasang dari rekomendasi Anda.
+
+Info pemasangan silakan hubungi Admin kami.
+👉 {portal_url}
+
+_Terima kasih telah berlangganan di LenxyNet!_`
+        },
+        {
+          id: 'custom',
+          title: '✏️ Tulis Pesan Kustom Sendiri',
+          text: `PROMO MENARIK LENXYNET! 🎉
+Halo *{nama}*,
+
+[Tuliskan penawaran promo spesial Anda di sini...]
+
+Kunjungi portal kami untuk info lengkap:
+👉 {portal_url}
+
+_LenxyNet Fiber_`
+        }
+      ]
+    };
+
+    let currentWATarget = 'all'; // 'all', 'unpaid', 'paid', 'isolated', 'active', 'single'
+    let currentWACategory = 'notice'; // 'notice', 'promo'
+    let currentSingleMode = 'message'; // 'message', 'cash'
+    let currentSingleCustomerId = null;
+    let waTargetRecipientsCache = [];
+
+    function openGlobalWAModal(defaultTarget = 'all') {
+      const modal = document.getElementById('sendWAModal');
+      modal.classList.remove('hidden');
+      
+      // Reset progress
+      const progressBox = document.getElementById('wa-broadcast-progress-box');
+      if (progressBox) progressBox.classList.add('hidden');
+      
+      populateSingleCustomerDropdown();
+      setWATarget(defaultTarget);
+      setWACategory('notice');
     }
 
     function sendManualWA(id, name, phone) {
@@ -2832,47 +3088,311 @@
         showToast(`Pelanggan ${name} belum memiliki nomor WhatsApp! Klik ikon pensil di nomor untuk mengisi.`, 'error');
         return;
       }
-      activeSendWACustId = id;
-      document.getElementById('wa-target-name').innerText = `Kepada: ${name} (${phone})`;
-      loadPromoTemplate();
-      document.getElementById('sendWAModal').classList.remove('hidden');
+      currentSingleCustomerId = id;
+      openGlobalWAModal('single');
+      
+      // Pilih di dropdown
+      const sel = document.getElementById('wa-single-customer-select');
+      if (sel) {
+        sel.value = String(id);
+        onSingleCustomerSelected(String(id));
+      }
     }
 
     function closeSendWAModal() {
       document.getElementById('sendWAModal').classList.add('hidden');
     }
 
-    async function executeSendWA(type) {
-      if (!activeSendWACustId) {
-        showToast('ID Pelanggan tidak valid', 'error');
+    function populateSingleCustomerDropdown() {
+      const select = document.getElementById('wa-single-customer-select');
+      if (!select) return;
+      select.innerHTML = '';
+      
+      const list = Array.isArray(rawCustomersList) ? rawCustomersList : [];
+      if (!list.length) {
+        select.innerHTML = '<option value="">(Belum ada data pelanggan)</option>';
         return;
       }
-      const targetId = activeSendWACustId;
-      const customMessage = type === 'promo' ? document.getElementById('promo-custom-text').value : null;
-      const durationMonths = type === 'lunas' ? document.getElementById('cash-duration-months').value : 1;
 
-      closeSendWAModal();
-      showToast('Mengirim pesan WhatsApp...', 'info');
+      list.forEach(c => {
+        const hasPhone = Boolean(c.phone && c.phone !== '-');
+        const phoneLabel = hasPhone ? c.phone : 'Tanpa No. WA';
+        const opt = document.createElement('option');
+        opt.value = String(c.id);
+        opt.textContent = `${c.name} (${c.pppoe_username}) - ${phoneLabel}`;
+        select.appendChild(opt);
+      });
+
+      if (!currentSingleCustomerId && list.length > 0) {
+        currentSingleCustomerId = list[0].id;
+      }
+    }
+
+    function setWATarget(target) {
+      currentWATarget = target;
+      
+      // Update styling tombol target
+      ['all', 'unpaid', 'paid', 'isolated', 'active', 'single'].forEach(t => {
+        const btn = document.getElementById(`btn-target-${t}`);
+        if (btn) {
+          if (t === target) {
+            btn.className = 'px-2.5 py-2 rounded-xl border border-emerald-500 bg-emerald-500/20 text-emerald-300 text-left font-bold shadow-sm transition flex items-center gap-2';
+          } else {
+            btn.className = 'px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-slate-500 transition flex items-center gap-2';
+          }
+        }
+      });
+
+      const singleBox = document.getElementById('wa-single-customer-box');
+      const singleTabs = document.getElementById('wa-single-mode-tabs');
+      
+      if (target === 'single') {
+        if (singleBox) singleBox.classList.remove('hidden');
+        if (singleTabs) singleTabs.classList.remove('hidden');
+        switchSingleMode(currentSingleMode);
+      } else {
+        if (singleBox) singleBox.classList.add('hidden');
+        if (singleTabs) singleTabs.classList.add('hidden');
+        switchSingleMode('message');
+      }
+
+      refreshWATargetPreview();
+    }
+
+    function onSingleCustomerSelected(val) {
+      currentSingleCustomerId = val ? parseInt(val, 10) : null;
+      refreshWATargetPreview();
+    }
+
+    function switchSingleMode(mode) {
+      currentSingleMode = mode;
+      const btnMsg = document.getElementById('btn-mode-message');
+      const btnCash = document.getElementById('btn-mode-cash');
+      const cashContainer = document.getElementById('wa-cash-container');
+      const msgContainer = document.getElementById('wa-message-container');
+
+      if (mode === 'cash') {
+        if (btnMsg) btnMsg.className = 'px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition';
+        if (btnCash) btnCash.className = 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold text-xs flex items-center gap-1.5 transition';
+        if (cashContainer) cashContainer.classList.remove('hidden');
+        if (msgContainer) msgContainer.classList.add('hidden');
+      } else {
+        if (btnMsg) btnMsg.className = 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold text-xs flex items-center gap-1.5 transition';
+        if (btnCash) btnCash.className = 'px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition';
+        if (cashContainer) cashContainer.classList.add('hidden');
+        if (msgContainer) msgContainer.classList.remove('hidden');
+      }
+    }
+
+    async function refreshWATargetPreview() {
+      const badge = document.getElementById('wa-target-count-badge');
+      const detail = document.getElementById('wa-target-detail-text');
+      if (badge) badge.innerText = 'Memeriksa...';
 
       try {
-        const res = await fetch(`/api/admin/customers/${encodeURIComponent(targetId)}/send-wa`, {
+        let url = `/api/admin/whatsapp/target-preview?target=${encodeURIComponent(currentWATarget)}`;
+        if (currentWATarget === 'single' && currentSingleCustomerId) {
+          url += `&customerId=${currentSingleCustomerId}`;
+        }
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.success) {
+          waTargetRecipientsCache = data.recipients || [];
+          const count = data.count || 0;
+          if (badge) {
+            badge.innerText = `${count} Pelanggan`;
+            badge.className = count > 0 
+              ? 'px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold font-mono'
+              : 'px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-bold font-mono';
+          }
+          if (detail) {
+            if (currentWATarget === 'single' && waTargetRecipientsCache[0]) {
+              detail.innerText = `${waTargetRecipientsCache[0].name} (${waTargetRecipientsCache[0].phone})`;
+            } else if (currentWATarget === 'unpaid') {
+              detail.innerText = 'Khusus pelanggan belum lunas';
+            } else if (currentWATarget === 'paid') {
+              detail.innerText = 'Khusus pelanggan sudah lunas';
+            } else if (currentWATarget === 'isolated') {
+              detail.innerText = 'Pelanggan status terisolir';
+            } else if (currentWATarget === 'active') {
+              detail.innerText = 'Pelanggan aktif normal';
+            } else {
+              detail.innerText = 'Seluruh nomor WA terdaftar';
+            }
+          }
+        }
+      } catch (err) {
+        if (badge) badge.innerText = 'Error';
+      }
+    }
+
+    function setWACategory(cat) {
+      currentWACategory = cat;
+      const btnNotice = document.getElementById('btn-cat-notice');
+      const btnPromo = document.getElementById('btn-cat-promo');
+
+      if (cat === 'promo') {
+        if (btnNotice) {
+          btnNotice.className = 'p-3 rounded-xl border border-slate-700 bg-slate-900 text-left transition flex items-start gap-2.5 opacity-80 hover:opacity-100';
+          const title = btnNotice.querySelector('div.font-bold');
+          if (title) title.className = 'font-bold text-slate-200 text-xs';
+        }
+        if (btnPromo) {
+          btnPromo.className = 'p-3 rounded-xl border border-sky-500/50 bg-sky-500/10 text-left transition flex items-start gap-2.5 shadow-sm';
+          const title = btnPromo.querySelector('div.font-bold');
+          if (title) title.className = 'font-bold text-sky-400 text-xs';
+        }
+      } else {
+        if (btnNotice) {
+          btnNotice.className = 'p-3 rounded-xl border border-amber-500/50 bg-amber-500/10 text-left transition flex items-start gap-2.5 shadow-sm';
+          const title = btnNotice.querySelector('div.font-bold');
+          if (title) title.className = 'font-bold text-amber-300 text-xs';
+        }
+        if (btnPromo) {
+          btnPromo.className = 'p-3 rounded-xl border border-slate-700 bg-slate-900 text-left transition flex items-start gap-2.5 opacity-80 hover:opacity-100';
+          const title = btnPromo.querySelector('div.font-bold');
+          if (title) title.className = 'font-bold text-slate-200 text-xs';
+        }
+      }
+
+      populateWATemplatesDropdown();
+    }
+
+    function populateWATemplatesDropdown() {
+      const select = document.getElementById('wa-template-preset-select');
+      if (!select) return;
+      select.innerHTML = '';
+
+      const templates = WA_PRESET_TEMPLATES[currentWACategory] || [];
+      templates.forEach((tpl, idx) => {
+        const opt = document.createElement('option');
+        opt.value = tpl.id;
+        opt.textContent = tpl.title;
+        select.appendChild(opt);
+      });
+
+      if (templates.length > 0) {
+        applyWATemplatePreset(templates[0].id);
+      }
+    }
+
+    function applyWATemplatePreset(id) {
+      const templates = WA_PRESET_TEMPLATES[currentWACategory] || [];
+      const found = templates.find(t => t.id === id);
+      const textarea = document.getElementById('wa-broadcast-message-text');
+      if (found && textarea) {
+        textarea.value = found.text;
+      }
+    }
+
+    function insertWAPlaceholder(tag) {
+      const textarea = document.getElementById('wa-broadcast-message-text');
+      if (!textarea) return;
+      
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      textarea.value = text.substring(0, start) + tag + text.substring(end);
+      textarea.selectionStart = textarea.selectionEnd = start + tag.length;
+      textarea.focus();
+    }
+
+    async function executeSendWABroadcast() {
+      const message = document.getElementById('wa-broadcast-message-text').value.trim();
+      if (!message) {
+        showToast('Isi pesan WhatsApp tidak boleh kosong!', 'error');
+        return;
+      }
+
+      if (!waTargetRecipientsCache.length) {
+        showToast('Tidak ada pelanggan target yang memiliki nomor WhatsApp!', 'error');
+        return;
+      }
+
+      const totalTarget = waTargetRecipientsCache.length;
+      const btn = document.getElementById('btn-submit-wa-broadcast');
+      const btnText = document.getElementById('btn-submit-wa-broadcast-text');
+      const progressBox = document.getElementById('wa-broadcast-progress-box');
+      const progressTitle = document.getElementById('wa-progress-title');
+      const progressStats = document.getElementById('wa-progress-stats');
+      const progressBar = document.getElementById('wa-progress-bar');
+      const progressLog = document.getElementById('wa-progress-log');
+
+      btn.disabled = true;
+      btnText.innerText = 'Mengirim Broadcast...';
+      if (progressBox) progressBox.classList.remove('hidden');
+      if (progressStats) progressStats.innerText = `0 / ${totalTarget}`;
+      if (progressBar) progressBar.style.width = '10%';
+      if (progressLog) progressLog.innerText = `Memulai pengiriman pesan ke ${totalTarget} pelanggan...`;
+
+      try {
+        const res = await fetch('/api/admin/whatsapp/send-broadcast', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type, customMessage, durationMonths })
+          body: JSON.stringify({
+            target: currentWATarget,
+            customerId: currentSingleCustomerId,
+            category: currentWACategory,
+            messageTemplate: message
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          if (progressBar) progressBar.style.width = '100%';
+          if (progressStats) progressStats.innerText = `${data.sentCount} / ${data.total}`;
+          if (progressTitle) progressTitle.innerHTML = '<span class="text-emerald-400">✅ Selesai Terkirim!</span>';
+          if (progressLog) progressLog.innerText = `Sukses: ${data.sentCount} terkirim. Gagal: ${data.failedCount}`;
+          
+          showToast(data.message || 'Pesan broadcast WhatsApp berhasil dikirim!', 'success');
+          setTimeout(() => {
+            closeSendWAModal();
+          }, 1800);
+        } else {
+          showToast(data.error || 'Gagal mengirim broadcast WhatsApp', 'error');
+          if (progressTitle) progressTitle.innerHTML = '<span class="text-rose-400">Gagal Mengirim</span>';
+          if (progressLog) progressLog.innerText = data.error || 'Terjadi kesalahan server';
+        }
+      } catch (err) {
+        showToast('Kesalahan koneksi ke server', 'error');
+      } finally {
+        btn.disabled = false;
+        btnText.innerText = 'Kirim Pesan WhatsApp Sekarang';
+      }
+    }
+
+    async function executeCashPayWA() {
+      if (!currentSingleCustomerId) {
+        showToast('Pilih pelanggan terlebih dahulu!', 'error');
+        return;
+      }
+      const durationMonths = parseInt(document.getElementById('cash-duration-months').value, 10) || 1;
+      const btn = document.getElementById('btn-cash-submit');
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses Lunas...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/admin/customers/${encodeURIComponent(currentSingleCustomerId)}/send-wa`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'lunas', durationMonths })
         });
         const data = await res.json();
         if (res.ok && data.success) {
           showToast(data.message, 'success');
-          // Jika kirim template lunas (pembayaran cash), refresh tampilan tabel & statistik
-          if (type === 'lunas') {
-            loadStats();
-            loadCustomers();
-          }
+          closeSendWAModal();
+          loadStats();
+          loadCustomers();
         } else {
-          showToast(data.error || 'Gagal mengirim WhatsApp', 'error');
+          showToast(data.error || 'Gagal mencatat pembayaran cash', 'error');
         }
-      } catch (e) {
+      } catch (err) {
         showToast('Gagal menghubungi server', 'error');
+      } finally {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
       }
     }
 
