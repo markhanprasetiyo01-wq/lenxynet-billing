@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Database SQLite & Backups
+database.sqlite
+database.sqlite-shm
+database.sqlite-wal
+*.sqlite
+*.backup
+*.rsc
+temp_backups/
+
+# WhatsApp Bot Session (Baileys Session Keys & Credentials)
+wa_session/
+baileys_auth/
+
+# Large Binaries
+cloudflared.exe
+*.exe
+
+# User Uploaded Payment Proofs
+public/uploads/proofs/*
+!public/uploads/proofs/.gitkeep
+
+# Custom QRIS Uploads (keep default-qris)
+public/uploads/qris/qris_custom_*
+
+# Logs & Temporary Files
+*.log
+npm-debug.log*
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
