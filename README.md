@@ -122,26 +122,51 @@ cd lenxynet-billing
 npm install
 ```
 
-### 5. Pasang PM2 (Agar Server Otomatis Berjalan 24 Jam & Hidup Saat Mati Listrik)
-Di Armbian, gunakan **PM2** agar aplikasi tidak mati saat jendela terminal ditutup:
+### 5. Pasang PM2 & Konfigurasi Auto-Start (Server Otomatis Hidup Saat STB Nyala / Mati Lampu)
+Di Armbian, wajib gunakan **PM2 (Production Process Manager)** agar server:
+1. Otomatis berjalan di background 24 jam non-stop (terminal boleh ditutup).
+2. Otomatis menyala sendiri begitu STB mendapat aliran listrik / setelah mati lampu.
+3. Otomatis me-restart aplikasi jika terjadi error/crash.
+
+Jalankan urutan perintah berikut:
 ```bash
-# 1. Install PM2 global
+# 1. Install PM2 secara global
 sudo npm install -g pm2
 
-# 2. Jalankan aplikasi LenxyNet di background
+# 2. Masuk ke folder project & daftarkan aplikasi ke PM2
+cd ~/lenxynet-billing
 pm2 start server.js --name "lenxynet"
 
-# 3. Simpan state PM2 agar hidup otomatis saat STB dinyalakan / mati lampu
+# 3. Simpan daftar proses agar PM2 selalu mengingatnya
 pm2 save
+
+# 4. Generate perintah auto-start sistem Linux
 pm2 startup
 ```
-*(Salin dan jalankan perintah `sudo env PATH...` yang dimunculkan oleh `pm2 startup` jika diminta)*.
 
-#### Perintah Berguna PM2 di STB:
-- Melihat log live: `pm2 logs lenxynet`
-- Melihat status CPU/RAM: `pm2 status`
-- Restart server: `pm2 restart lenxynet`
-- Stop server: `pm2 stop lenxynet`
+> [!IMPORTANT]
+> **Langkah Kunci Auto-Start:**
+> Setelah Anda menjalankan `pm2 startup`, di layar terminal paling bawah akan muncul **1 baris perintah khusus** yang diawali dengan `sudo env PATH=...`.
+> 
+> **Copy baris perintah yang muncul tersebut, paste ke terminal, lalu tekan Enter.**
+> 
+> *Contoh baris perintah yang dimunculkan:*
+> ```bash
+> sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u root --hp /root
+> ```
+
+#### 🧪 Cara Menguji Auto-Start:
+Restart STB Anda dengan perintah:
+```bash
+sudo reboot
+```
+Tunggu 1–2 menit sampai STB booting, lalu buka browser di HP/laptop dan akses `https://emailgratisan.fun` atau `http://IP_STB:3000`. Dashboard langsung bisa diakses tanpa perlu menyentuh terminal lagi!
+
+#### 📋 Perintah Berguna PM2 Sehari-hari:
+- **Melihat status & penggunaan CPU/RAM:** `pm2 status`
+- **Melihat log live (real-time):** `pm2 logs lenxynet` *(keluar dengan `Ctrl + C`)*
+- **Restart server (misal setelah ubah setting):** `pm2 restart lenxynet`
+- **Stop server sementara:** `pm2 stop lenxynet`
 
 ---
 
