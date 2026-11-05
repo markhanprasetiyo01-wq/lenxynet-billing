@@ -3651,10 +3651,11 @@
       try {
         const res = await fetch('/api/admin/settings/telegram');
         const data = await res.json();
-        if (data.success && data.settings) {
-          document.getElementById('telegram-bot-token').value = data.settings.bot_token || '';
-          document.getElementById('telegram-chat-id').value = data.settings.chat_id || '';
-          document.getElementById('telegram-backup-enabled').checked = !!data.settings.enabled;
+        if (data.success) {
+          const s = data.settings || data;
+          document.getElementById('telegram-bot-token').value = s.bot_token || s.botToken || '';
+          document.getElementById('telegram-chat-id').value = s.chat_id || s.chatId || '';
+          document.getElementById('telegram-backup-enabled').checked = (s.enabled !== undefined) ? !!s.enabled : true;
         }
       } catch (err) {
         console.error('Gagal mengambil pengaturan Telegram:', err);

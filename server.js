@@ -1629,6 +1629,13 @@ app.get('/api/admin/settings/telegram', requireAdminAuth, (req, res) => {
   const cfg = getTelegramConfig();
   res.json({
     success: true,
+    settings: {
+      bot_token: cfg.botToken,
+      chat_id: cfg.chatId,
+      enabled: cfg.enabled
+    },
+    bot_token: cfg.botToken,
+    chat_id: cfg.chatId,
     botToken: cfg.botToken,
     chatId: cfg.chatId,
     enabled: cfg.enabled
