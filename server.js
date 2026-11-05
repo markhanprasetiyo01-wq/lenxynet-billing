@@ -1456,7 +1456,7 @@ app.get('/api/user/portal', requireUserOrAdminAuth, async (req, res) => {
 
     const toleranceDays = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'tolerance_days'").get()?.value || '3');
     const qrisImage = db.prepare("SELECT value FROM settings WHERE key = 'qris_image'").get()?.value || '/uploads/qris/default-qris.png';
-    const mockPaymentEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value !== 'false';
+    const mockPaymentEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value === 'true';
 
     res.json({
       user: {
@@ -1478,8 +1478,8 @@ app.get('/api/user/portal', requireUserOrAdminAuth, async (req, res) => {
 
 // Mock Pay via QRIS - SAAT LUNAS OTOMATIS ENABLE DI MIKROTIK (Terlindungi Sesi & Setting)
 app.post('/api/user/pay-qris', requireUserOrAdminAuth, async (req, res) => {
-  const mockEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value || 'true';
-  if (mockEnabled === 'false') {
+  const mockEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value === 'true';
+  if (!mockEnabled) {
     return res.status(403).json({ error: 'Simulasi pelunasan QRIS mandiri dinonaktifkan oleh administrator.' });
   }
 
@@ -1569,7 +1569,7 @@ app.get('/api/settings/qris', (req, res) => {
   try {
     const qrisImage = db.prepare("SELECT value FROM settings WHERE key = 'qris_image'").get()?.value || '/uploads/qris/default-qris.png';
     const adminWaNumber = db.prepare("SELECT value FROM settings WHERE key = 'admin_wa_number'").get()?.value || '';
-    const mockPaymentEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value !== 'false';
+    const mockPaymentEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value === 'true';
     const publicPortalUrl = db.prepare("SELECT value FROM settings WHERE key = 'public_portal_url'").get()?.value || '';
     res.json({
       qrisImage,
