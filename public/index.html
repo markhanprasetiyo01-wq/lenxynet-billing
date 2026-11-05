@@ -396,18 +396,19 @@
           <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5">Sinkronisasi langsung dengan RouterOS API</p>
         </div>
 
-        <div class="flex items-center space-x-2">
-          <button onclick="openGlobalWAModal('all')" class="flex-1 sm:flex-initial px-3 sm:px-3.5 py-2 bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95" title="Kirim WhatsApp Broadcast / Global">
-            <i class="fa-brands fa-whatsapp text-sm text-emerald-400"></i> <span class="hidden sm:inline">Kirim</span> WA Global
+        <!-- Table Action Controls (Responsive: 2x2 grid on mobile, row on desktop) -->
+        <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
+          <button onclick="openGlobalWAModal('all')" class="w-full sm:w-auto px-3 sm:px-3.5 py-2 bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95" title="Kirim WhatsApp Broadcast / Global">
+            <i class="fa-brands fa-whatsapp text-sm text-emerald-400 shrink-0"></i> <span>WA Global</span>
           </button>
-          <button id="btn-autoisolir" onclick="triggerAutoIsolir()" class="flex-1 sm:flex-initial px-3 sm:px-3.5 py-2 bg-rose-600/15 hover:bg-rose-600/25 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95" title="Jalankan pengecekan jatuh tempo dan isolir pelanggan yang telat">
-            <i class="fa-solid fa-bolt text-[11px]" id="isolir-icon"></i> <span class="hidden sm:inline">Jalankan</span> Cek Isolir
+          <button id="btn-autoisolir" onclick="triggerAutoIsolir()" class="w-full sm:w-auto px-3 sm:px-3.5 py-2 bg-rose-600/15 hover:bg-rose-600/25 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95" title="Jalankan pengecekan jatuh tempo dan isolir pelanggan yang telat">
+            <i class="fa-solid fa-bolt text-[11px] shrink-0" id="isolir-icon"></i> <span>Cek Isolir</span>
           </button>
-          <button id="btn-sync" onclick="syncWithMikrotik()" class="flex-1 sm:flex-initial px-3 sm:px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700/80 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95">
-            <i class="fa-solid fa-rotate text-[11px]" id="sync-icon"></i> Sinkron MikroTik
+          <button id="btn-sync" onclick="syncWithMikrotik()" class="w-full sm:w-auto px-3 sm:px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700/80 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95">
+            <i class="fa-solid fa-rotate text-[11px] shrink-0" id="sync-icon"></i> <span>Sinkron MikroTik</span>
           </button>
-          <button onclick="openAddModal()" class="flex-1 sm:flex-initial px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm shadow-sky-600/30 active:scale-95">
-            <i class="fa-solid fa-plus text-[11px]"></i> Tambah User
+          <button onclick="openAddModal()" class="w-full sm:w-auto px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm shadow-sky-600/30 active:scale-95">
+            <i class="fa-solid fa-plus text-[11px] shrink-0"></i> <span>Tambah User</span>
           </button>
         </div>
       </div>
@@ -893,21 +894,21 @@
   </div>
 
   <!-- Modal WhatsApp Global & Broadcast (Pemberitahuan, Promo, Target Filter) -->
-  <div id="sendWAModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
-    <div class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-xl p-5 sm:p-6 shadow-2xl modal-enter relative max-h-[92vh] overflow-y-auto space-y-4">
+  <div id="sendWAModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-2.5 sm:p-4 hidden">
+    <div class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-xl p-3.5 sm:p-6 shadow-2xl modal-enter relative max-h-[92vh] overflow-y-auto space-y-3.5 sm:space-y-4">
       
       <!-- Modal Header -->
       <div class="flex items-center justify-between pb-3 border-b border-brand-border/80">
-        <div class="flex items-center space-x-2.5">
-          <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg">
+        <div class="flex items-center space-x-2.5 min-w-0">
+          <div class="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg shrink-0">
             <i class="fa-brands fa-whatsapp"></i>
           </div>
-          <div>
-            <h3 class="text-sm font-bold text-white">Kirim Pesan WhatsApp & Broadcast Global</h3>
-            <p class="text-[11px] text-slate-400">Pemberitahuan gangguan/maintenance & promosi paket ke pelanggan</p>
+          <div class="min-w-0">
+            <h3 class="text-sm font-bold text-white truncate">Kirim WhatsApp & Broadcast Global</h3>
+            <p class="text-[10px] sm:text-[11px] text-slate-400 truncate">Pemberitahuan gangguan & promosi paket</p>
           </div>
         </div>
-        <button onclick="closeSendWAModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition">
+        <button onclick="closeSendWAModal()" class="w-7 h-7 rounded-lg bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition shrink-0 ml-2">
           <i class="fa-solid fa-xmark text-xs"></i>
         </button>
       </div>
@@ -918,58 +919,58 @@
           Target Penerima Pesan:
         </label>
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
-          <button type="button" onclick="setWATarget('all')" id="btn-target-all" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-emerald-500/50 transition flex items-center gap-2">
-            <i class="fa-solid fa-users text-emerald-400 text-xs"></i>
-            <span class="truncate">Semua Pelanggan</span>
+          <button type="button" onclick="setWATarget('all')" id="btn-target-all" class="px-2 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-emerald-500/50 transition flex items-center gap-1.5 min-w-0">
+            <i class="fa-solid fa-users text-emerald-400 text-xs shrink-0"></i>
+            <span class="truncate text-[11px] sm:text-xs">Semua Pelanggan</span>
           </button>
-          <button type="button" onclick="setWATarget('unpaid')" id="btn-target-unpaid" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-amber-500/50 transition flex items-center gap-2">
-            <i class="fa-solid fa-clock text-amber-400 text-xs"></i>
-            <span class="truncate">Belum Bayar</span>
+          <button type="button" onclick="setWATarget('unpaid')" id="btn-target-unpaid" class="px-2 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-amber-500/50 transition flex items-center gap-1.5 min-w-0">
+            <i class="fa-solid fa-clock text-amber-400 text-xs shrink-0"></i>
+            <span class="truncate text-[11px] sm:text-xs">Belum Bayar</span>
           </button>
-          <button type="button" onclick="setWATarget('paid')" id="btn-target-paid" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-emerald-500/50 transition flex items-center gap-2">
-            <i class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
-            <span class="truncate">Sudah Bayar</span>
+          <button type="button" onclick="setWATarget('paid')" id="btn-target-paid" class="px-2 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-emerald-500/50 transition flex items-center gap-1.5 min-w-0">
+            <i class="fa-solid fa-circle-check text-emerald-400 text-xs shrink-0"></i>
+            <span class="truncate text-[11px] sm:text-xs">Sudah Bayar</span>
           </button>
-          <button type="button" onclick="setWATarget('isolated')" id="btn-target-isolated" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-rose-500/50 transition flex items-center gap-2">
-            <i class="fa-solid fa-ban text-rose-400 text-xs"></i>
-            <span class="truncate">Terisolir</span>
+          <button type="button" onclick="setWATarget('isolated')" id="btn-target-isolated" class="px-2 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-rose-500/50 transition flex items-center gap-1.5 min-w-0">
+            <i class="fa-solid fa-ban text-rose-400 text-xs shrink-0"></i>
+            <span class="truncate text-[11px] sm:text-xs">Terisolir</span>
           </button>
-          <button type="button" onclick="setWATarget('active')" id="btn-target-active" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-sky-500/50 transition flex items-center gap-2">
-            <i class="fa-solid fa-wifi text-sky-400 text-xs"></i>
-            <span class="truncate">Tidak Terisolir</span>
+          <button type="button" onclick="setWATarget('active')" id="btn-target-active" class="px-2 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-sky-500/50 transition flex items-center gap-1.5 min-w-0">
+            <i class="fa-solid fa-wifi text-sky-400 text-xs shrink-0"></i>
+            <span class="truncate text-[11px] sm:text-xs">Tidak Terisolir</span>
           </button>
-          <button type="button" onclick="setWATarget('single')" id="btn-target-single" class="px-2.5 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-purple-500/50 transition flex items-center gap-2">
-            <i class="fa-solid fa-user text-purple-400 text-xs"></i>
-            <span class="truncate">Orang Tertentu</span>
+          <button type="button" onclick="setWATarget('single')" id="btn-target-single" class="px-2 py-2 rounded-xl border border-slate-700 bg-slate-900 text-slate-300 text-left font-medium hover:border-purple-500/50 transition flex items-center gap-1.5 min-w-0">
+            <i class="fa-solid fa-user text-purple-400 text-xs shrink-0"></i>
+            <span class="truncate text-[11px] sm:text-xs">Orang Tertentu</span>
           </button>
         </div>
 
         <!-- Single Customer Dropdown (Muncul jika target 'single') -->
-        <div id="wa-single-customer-box" class="hidden mt-2 p-3 rounded-xl bg-slate-900/80 border border-brand-border space-y-1.5">
+        <div id="wa-single-customer-box" class="hidden mt-2 p-2.5 sm:p-3 rounded-xl bg-slate-900/80 border border-brand-border space-y-1.5">
           <label class="block font-semibold text-slate-300 text-[11px]">Pilih Pelanggan:</label>
-          <select id="wa-single-customer-select" onchange="onSingleCustomerSelected(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
+          <select id="wa-single-customer-select" onchange="onSingleCustomerSelected(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono">
             <!-- Diisi lewat JavaScript -->
           </select>
         </div>
 
         <!-- Target Counter & Preview Summary Badge -->
-        <div id="wa-target-summary-box" class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between text-xs">
+        <div id="wa-target-summary-box" class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs">
           <div class="flex items-center gap-2 text-slate-300">
-            <i class="fa-solid fa-bullseye text-emerald-400"></i>
+            <i class="fa-solid fa-bullseye text-emerald-400 shrink-0"></i>
             <span>Penerima Terpilih:</span>
             <span id="wa-target-count-badge" class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-bold font-mono">Memuat...</span>
           </div>
-          <span id="wa-target-detail-text" class="text-[11px] text-slate-400 truncate max-w-[200px]">Semua pelanggan</span>
+          <span id="wa-target-detail-text" class="text-[11px] text-slate-400 truncate">Semua pelanggan</span>
         </div>
       </div>
 
       <!-- Mode Khusus Single: Tab Kirim Pesan vs Bayar Cash -->
       <div id="wa-single-mode-tabs" class="hidden border-b border-brand-border/60 pb-2">
         <div class="flex items-center gap-2">
-          <button type="button" onclick="switchSingleMode('message')" id="btn-mode-message" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold text-xs flex items-center gap-1.5 transition">
-            <i class="fa-solid fa-paper-plane text-[10px]"></i> Kirim Pesan WhatsApp
+          <button type="button" onclick="switchSingleMode('message')" id="btn-mode-message" class="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition">
+            <i class="fa-solid fa-paper-plane text-[10px]"></i> Kirim Pesan WA
           </button>
-          <button type="button" onclick="switchSingleMode('cash')" id="btn-mode-cash" class="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs flex items-center gap-1.5 transition">
+          <button type="button" onclick="switchSingleMode('cash')" id="btn-mode-cash" class="flex-1 sm:flex-initial px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition">
             <i class="fa-solid fa-money-bill-wave text-[10px] text-emerald-400"></i> Bayar Tunai (Kasir)
           </button>
         </div>
@@ -981,7 +982,7 @@
           <div class="font-bold text-white flex items-center gap-1.5">
             <i class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
             <span>Catat Bayar Tunai / Cash (Kasir)</span>
-            <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">Auto-Enable MikroTik</span>
+            <span class="text-[9px] uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">Auto-Enable</span>
           </div>
         </div>
         <div class="flex items-center space-x-2">
@@ -1010,26 +1011,26 @@
           <label class="block font-semibold text-slate-300">
             Pilih Jenis / Kategori Pesan:
           </label>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <!-- Jenis 1: Pemberitahuan -->
-            <button type="button" onclick="setWACategory('notice')" id="btn-cat-notice" class="p-3 rounded-xl border border-amber-500/50 bg-amber-500/10 text-left transition flex items-start gap-2.5">
+            <button type="button" onclick="setWACategory('notice')" id="btn-cat-notice" class="p-2.5 sm:p-3 rounded-xl border border-amber-500/50 bg-amber-500/10 text-left transition flex items-start gap-2.5">
               <div class="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
                 <i class="fa-solid fa-bullhorn text-xs"></i>
               </div>
-              <div class="truncate">
+              <div class="min-w-0">
                 <div class="font-bold text-amber-300 text-xs">1. Pemberitahuan</div>
-                <div class="text-[10px] text-slate-400 truncate mt-0.5">Maintenance, gangguan kabel FO, info teknis</div>
+                <div class="text-[10px] text-slate-400 mt-0.5 leading-snug">Maintenance, gangguan kabel FO, info teknis</div>
               </div>
             </button>
 
             <!-- Jenis 2: Promosi -->
-            <button type="button" onclick="setWACategory('promo')" id="btn-cat-promo" class="p-3 rounded-xl border border-slate-700 bg-slate-900 text-left transition flex items-start gap-2.5 opacity-80 hover:opacity-100">
+            <button type="button" onclick="setWACategory('promo')" id="btn-cat-promo" class="p-2.5 sm:p-3 rounded-xl border border-slate-700 bg-slate-900 text-left transition flex items-start gap-2.5 opacity-80 hover:opacity-100">
               <div class="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 mt-0.5">
                 <i class="fa-solid fa-gift text-xs"></i>
               </div>
-              <div class="truncate">
+              <div class="min-w-0">
                 <div class="font-bold text-slate-200 text-xs">2. Promosi</div>
-                <div class="text-[10px] text-slate-400 truncate mt-0.5">Upgrade speed, hemat bayar 6 bln, diskon</div>
+                <div class="text-[10px] text-slate-400 mt-0.5 leading-snug">Upgrade speed, hemat bayar 6 bln, diskon</div>
               </div>
             </button>
           </div>
@@ -1041,9 +1042,9 @@
             <label class="font-semibold text-slate-300">
               Template Cepat Siap Pakai:
             </label>
-            <span class="text-[10px] text-slate-400">Otomatis mengisi teks di bawah</span>
+            <span class="text-[10px] text-slate-400">Otomatis mengisi teks</span>
           </div>
-          <select id="wa-template-preset-select" onchange="applyWATemplatePreset(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-semibold">
+          <select id="wa-template-preset-select" onchange="applyWATemplatePreset(this.value)" class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-semibold">
             <!-- Dinamis sesuai kategori -->
           </select>
         </div>
@@ -1054,31 +1055,31 @@
             <label class="font-semibold text-slate-300">
               Isi Pesan WhatsApp <span class="text-rose-400">*</span>:
             </label>
-            <span class="text-[10px] text-slate-400">Bebas diedit sesuai kebutuhan</span>
+            <span class="text-[10px] text-slate-400">Bebas diedit</span>
           </div>
 
-          <textarea id="wa-broadcast-message-text" rows="7" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono leading-relaxed" placeholder="Tulis pesan WhatsApp Anda di sini..."></textarea>
+          <textarea id="wa-broadcast-message-text" rows="6" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 font-mono leading-relaxed" placeholder="Tulis pesan WhatsApp Anda di sini..."></textarea>
 
           <!-- Variabel Dinamis Tag Helper -->
-          <div class="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
+          <div class="p-2 sm:p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-1.5">
             <div class="text-[10px] text-slate-400 flex items-center gap-1 font-semibold">
-              <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Klik untuk sisipkan variabel otomatis ke pesan:
+              <i class="fa-solid fa-wand-magic-sparkles text-amber-400"></i> Sisipkan variabel otomatis:
             </div>
-            <div class="flex flex-wrap gap-1 text-[10px]">
-              <button type="button" onclick="insertWAPlaceholder('{nama}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Nama Pelanggan">{nama}</button>
-              <button type="button" onclick="insertWAPlaceholder('{paket}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Nama Paket">{paket}</button>
-              <button type="button" onclick="insertWAPlaceholder('{jatuh_tempo}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Tanggal Jatuh Tempo">{jatuh_tempo}</button>
-              <button type="button" onclick="insertWAPlaceholder('{nominal}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition" title="Nominal Tagihan">{nominal}</button>
-              <button type="button" onclick="insertWAPlaceholder('{portal_url}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 font-mono transition" title="Link Portal Cek Tagihan">{portal_url}</button>
-              <button type="button" onclick="insertWAPlaceholder('{plans}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-mono transition" title="Daftar Paket & Harga">{plans}</button>
+            <div class="flex flex-wrap gap-1 sm:gap-1.5 text-[10px]">
+              <button type="button" onclick="insertWAPlaceholder('{nama}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition shrink-0" title="Nama Pelanggan">{nama}</button>
+              <button type="button" onclick="insertWAPlaceholder('{paket}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition shrink-0" title="Nama Paket">{paket}</button>
+              <button type="button" onclick="insertWAPlaceholder('{jatuh_tempo}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition shrink-0" title="Tanggal Jatuh Tempo">{jatuh_tempo}</button>
+              <button type="button" onclick="insertWAPlaceholder('{nominal}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 font-mono transition shrink-0" title="Nominal Tagihan">{nominal}</button>
+              <button type="button" onclick="insertWAPlaceholder('{portal_url}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 font-mono transition shrink-0" title="Link Portal Cek Tagihan">{portal_url}</button>
+              <button type="button" onclick="insertWAPlaceholder('{plans}')" class="px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-amber-300 border border-slate-700 font-mono transition shrink-0" title="Daftar Paket & Harga">{plans}</button>
             </div>
           </div>
         </div>
 
         <!-- Safe Broadcast Delay Notice -->
-        <div class="p-2.5 rounded-xl bg-sky-500/5 border border-sky-500/20 text-[11px] text-slate-400 flex items-center gap-2">
+        <div class="p-2 sm:p-2.5 rounded-xl bg-sky-500/5 border border-sky-500/20 text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-2">
           <i class="fa-solid fa-shield-halved text-sky-400 shrink-0"></i>
-          <span><b>Anti-Banned Protection:</b> Pesan broadcast dikirim bertahap dengan jeda aman 1.5 detik per nomor agar nomor WA Anda tidak diblokir WhatsApp.</span>
+          <span><b>Anti-Banned:</b> Jeda aman 1.5 detik per pesan agar nomor WA Anda aman dari pemblokiran spam.</span>
         </div>
 
         <!-- Live Progress Status Box (Hidden saat diam) -->
@@ -2551,17 +2552,17 @@
           </div>
 
           <!-- Baris Tagihan & Jatuh Tempo -->
-          <div class="flex items-center justify-between text-xs pt-1">
-            <button onclick="openManualBillModal(${c.id}, '${escapeHtml(c.name)}', '${c.pppoe_username}', '${c.bill_status || 'unpaid'}', ${isIsolated}, '${c.phone}')" class="focus:outline-none active:scale-95 text-left" title="Klik untuk Ubah Status Pembayaran">
+          <div class="flex items-center justify-between text-xs pt-1 gap-1">
+            <button onclick="openManualBillModal(${c.id}, '${escapeHtml(c.name)}', '${c.pppoe_username}', '${c.bill_status || 'unpaid'}', ${isIsolated}, '${c.phone}')" class="focus:outline-none active:scale-95 text-left shrink-0" title="Klik untuk Ubah Status Pembayaran">
               ${isPaid 
-                ? `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-check text-[9px]"></i> LUNAS <i class="fa-solid fa-pen text-[7px] opacity-40"></i></span>`
-                : `<span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-clock text-[9px]"></i> BELUM BAYAR <i class="fa-solid fa-pen text-[7px] opacity-40"></i></span>`
+                ? `<span class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-check text-[9px]"></i> LUNAS <i class="fa-solid fa-pen text-[7px] opacity-40"></i></span>`
+                : `<span class="px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30 inline-flex items-center gap-1"><i class="fa-solid fa-clock text-[9px]"></i> BELUM BAYAR <i class="fa-solid fa-pen text-[7px] opacity-40"></i></span>`
               }
             </button>
-            <div class="text-[11px] text-right">
+            <div class="text-[11px] text-right min-w-0 pl-1">
               <span class="text-slate-500 text-[9px] uppercase font-bold block">Jatuh Tempo:</span>
-              <button onclick="editDueDate(${c.id}, ${c.due_date || 'null'}, '${c.pppoe_username}')" class="text-sky-300 font-semibold hover:text-amber-300 text-[11px] inline-flex items-center gap-1">
-                ${c.nextDueDateFull || 'Belum Diatur'} <i class="fa-solid fa-pen-to-square text-[9px] text-slate-500"></i>
+              <button onclick="editDueDate(${c.id}, ${c.due_date || 'null'}, '${c.pppoe_username}')" class="text-sky-300 font-semibold hover:text-amber-300 text-[11px] inline-flex items-center gap-1 truncate max-w-full">
+                <span class="truncate">${c.nextDueDateFull || 'Belum Diatur'}</span> <i class="fa-solid fa-pen-to-square text-[9px] text-slate-500 shrink-0"></i>
               </button>
             </div>
           </div>
