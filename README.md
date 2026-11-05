@@ -6,13 +6,14 @@ Sistem manajemen pelanggan ISP & penagihan billing otomatis terintegrasi dengan 
 
 ## 📑 Daftar Isi
 1. [Fitur Utama](#-fitur-utama)
-2. [Arsitektur & Persyaratan Sistem](#-arsitektur--persyaratan-sistem)
-3. [Panduan Instalasi di PC Windows Baru](#-panduan-instalasi-di-pc-windows-baru)
-4. [Panduan Instalasi di STB HG680P (Armbian Linux) 24 Jam Non-Stop](#-panduan-instalasi-di-stb-hg680p-armbian-linux-24-jam-non-stop)
-5. [Setup Cloudflare Zero Trust Tunnel (Domain Pribadi)](#-setup-cloudflare-zero-trust-tunnel-domain-pribadi)
-6. [Restore & Migrasi Data dari Backup Telegram](#-restore--migrasi-data-dari-backup-telegram)
-7. [Pengaturan Dashboard & Koneksi Awal](#-pengaturan-dashboard--koneksi-awal)
-8. [Jadwal Otomatis (Cron Job)](#-jadwal-otomatis-cron-job)
+2. [Keunggulan Keamanan & Anti-Hacking](#-keunggulan-keamanan--anti-hacking)
+3. [Arsitektur & Persyaratan Sistem](#-arsitektur--persyaratan-sistem)
+4. [Panduan Instalasi di PC Windows Baru](#-panduan-instalasi-di-pc-windows-baru)
+5. [Panduan Instalasi di STB HG680P (Armbian Linux) 24 Jam Non-Stop](#-panduan-instalasi-di-stb-hg680p-armbian-linux-24-jam-non-stop)
+6. [Setup Cloudflare Zero Trust Tunnel (Domain Pribadi)](#-setup-cloudflare-zero-trust-tunnel-domain-pribadi)
+7. [Restore & Migrasi Data dari Backup Telegram](#-restore--migrasi-data-dari-backup-telegram)
+8. [Pengaturan Dashboard & Koneksi Awal](#-pengaturan-dashboard--koneksi-awal)
+9. [Jadwal Otomatis (Cron Job)](#-jadwal-otomatis-cron-job)
 
 ---
 
@@ -39,6 +40,46 @@ Sistem manajemen pelanggan ISP & penagihan billing otomatis terintegrasi dengan 
 - **🔒 Keamanan & Zero Waste Storage**:
   - Validasi integritas database otomatis sebelum kirim (`PRAGMA integrity_check`).
   - Zero-waste storage: File backup sementara di router dan server langsung dihapus setelah terkirim ke Telegram.
+
+---
+
+## 🛡️ Keunggulan Keamanan & Anti-Hacking
+
+Sistem ini dirancang dengan prinsip **Defense-in-Depth** (keamanan berlapis) untuk menjamin keamanan operasional ISP Anda:
+
+1. **🌐 Zero Open Ports & Proteksi Cloudflare Tunnel**:
+   - **Tanpa Port Forwarding**: Router/modem rumah Anda tidak perlu membuka port publik (Port 80, 443, dan 3000 ditutup total dari internet publik).
+   - **Penyembunyian IP Asli**: Penyerang tidak bisa melacak atau memindai (*port scanning*) alamat IP publik asli rumah/server Anda.
+   - **Perlindungan DDoS & WAF**: Seluruh akses luar disaring oleh jaringan global Cloudflare yang secara otomatis memblokir serangan brute force, bot jahat, dan serangan DDoS.
+   - **Enkripsi SSL/TLS Penuh**: Akses via domain resmi (misal `https://emailgratisan.fun`) terenkripsi HTTPS secara otomatis.
+
+2. **💉 100% Kebal Serangan SQL Injection**:
+   - Seluruh kueri ke database SQLite menggunakan **Prepared Statements / Parameterized Queries** (`db.prepare('... ?').run(...)`).
+   - Karakter input berbahaya tidak akan pernah dieksekusi sebagai perintah SQL, sehingga data pelanggan dan tagihan aman dari peretasan database.
+
+3. **🔑 Kontrol Akses & Sesi Bertingkat (RBAC)**:
+   - **Dashboard Admin**: Dilindungi middleware `requireAdminAuth` berbasis token acak berkriptografi tinggi dengan masa kedaluwarsa waktu (*session expiry guard*).
+   - **Portal Pelanggan**: Menggunakan verifikasi **OTP WhatsApp**. Pelanggan hanya bisa masuk jika menerima kode di nomor telepon yang sah.
+   - **Anti-IDOR (Insecure Direct Object Reference)**: Pelanggan hanya dapat melihat dan melunasi tagihannya sendiri (`WHERE id = ? AND customer_id = userSession.customer_id`). Pelanggan tidak bisa mengintip atau mengubah data pengguna lain.
+
+4. **🚫 Proteksi Server-Side pada Mode Simulasi Bayar Demo**:
+   - Fitur simulasi demo tidak hanya disembunyikan di tampilan antarmuka (UI), tetapi **dikunci ketat di level backend / API**.
+   - Ketika mode demo dimatikan (`mock_payment_enabled = false`), upaya penembakan endpoint `POST /api/user/pay-qris` secara langsung lewat curl, Postman, atau bot peretas akan langsung ditolak server dengan respon **`403 Forbidden`**.
+   - Pengaturan bawaan sistem terkunci secara aman ke status nonaktif (*secure-by-default*).
+
+5. **📁 Keamanan Sanitasi File Upload (Anti-Webshell / Backdoor)**:
+   - Sistem upload bukti transfer menggunakan pustaka `multer` dengan validasi ganda:
+     - **Filter Ekstensi & MIME-Type Ketat**: Hanya menerima berkas gambar asli (`.jpg`, `.jpeg`, `.png`, `.webp`). Berkas berbahaya seperti script PHP, Shell, Python, atau Executable otomatis diblokir.
+     - **Limit Ukuran**: Ukuran berkas dibatasi maksimal 5 MB untuk mencegah serangan pengurasan penyimpanan (*storage exhaustion*).
+     - **Random Hash Filename**: Nama berkas diacak ulang menggunakan kriptografi acak saat disimpan untuk mencegah serangan *Directory Traversal*.
+
+6. **🔒 Isolasi Port API MikroTik**:
+   - Port API RouterOS (`8728`) hanya dibuka untuk segmen jaringan lokal privat dan hanya dapat dihubungi oleh IP internal server Node.js.
+   - Port manajemen router tidak pernah diekspos ke publik internet luar.
+
+7. **💾 Integritas Data & Auto-Backup Terdistribusi**:
+   - Database diperiksa integritasnya secara otomatis (`PRAGMA integrity_check`) sebelum dicadangkan.
+   - Backup otomatis database SQLite dan skrip konfigurasi MikroTik dikirimkan setiap subuh ke akun Telegram Bot pribadi, menjamin data Anda dapat dipulihkan dalam hitungan menit jika terjadi musibah pada hardware fisik.
 
 ---
 
