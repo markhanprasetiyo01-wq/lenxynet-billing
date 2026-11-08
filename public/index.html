@@ -1747,14 +1747,26 @@
 
           <div>
             <label class="block font-semibold text-slate-300 mb-1">Password Admin Saat Ini *</label>
-            <input type="password" id="acc-old-password" required placeholder="Password saat ini"
-              class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-400 transition">
+            <div class="relative">
+              <input type="password" id="acc-old-password" required placeholder="Password saat ini"
+                class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-white font-mono pr-10 focus:outline-none focus:border-sky-400 transition">
+              <button type="button" onclick="togglePasswordVisibility('acc-old-password', 'eye-acc-old-icon')"
+                class="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300">
+                <i id="eye-acc-old-icon" class="fa-solid fa-eye text-xs"></i>
+              </button>
+            </div>
           </div>
 
           <div>
             <label class="block font-semibold text-slate-300 mb-1">Password Admin Baru (Opsional)</label>
-            <input type="password" id="acc-new-password" placeholder="Kosongkan jika tidak diubah"
-              class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-sky-400 transition">
+            <div class="relative">
+              <input type="password" id="acc-new-password" placeholder="Kosongkan jika tidak diubah"
+                class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-2 text-white font-mono pr-10 focus:outline-none focus:border-sky-400 transition">
+              <button type="button" onclick="togglePasswordVisibility('acc-new-password', 'eye-acc-new-icon')"
+                class="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300">
+                <i id="eye-acc-new-icon" class="fa-solid fa-eye text-xs"></i>
+              </button>
+            </div>
           </div>
 
           <div class="pt-3 border-t border-brand-border flex items-center justify-end space-x-2">
@@ -3886,8 +3898,20 @@ _LenxyNet Fiber_`
         const parsed = JSON.parse(auth);
         document.getElementById('acc-new-username').value = parsed.username || 'admin';
       }
-      document.getElementById('acc-old-password').value = '';
-      document.getElementById('acc-new-password').value = '';
+      const oldPass = document.getElementById('acc-old-password');
+      const newPass = document.getElementById('acc-new-password');
+      if (oldPass) {
+        oldPass.value = '';
+        oldPass.type = 'password';
+      }
+      if (newPass) {
+        newPass.value = '';
+        newPass.type = 'password';
+      }
+      const oldIcon = document.getElementById('eye-acc-old-icon');
+      if (oldIcon) oldIcon.className = 'fa-solid fa-eye text-xs';
+      const newIcon = document.getElementById('eye-acc-new-icon');
+      if (newIcon) newIcon.className = 'fa-solid fa-eye text-xs';
       document.getElementById('adminAccountModal').classList.remove('hidden');
     }
 
