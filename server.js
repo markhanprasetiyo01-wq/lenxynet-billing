@@ -745,7 +745,7 @@ app.post('/api/admin/whatsapp/send-broadcast', requireAdminAuth, async (req, res
       return res.status(400).json({ success: false, error: 'Tidak ada pelanggan yang cocok dengan filter target atau nomor WhatsApp belum terisi.' });
     }
 
-    const allPlans = db.prepare("SELECT name, speed, price FROM plans WHERE name NOT IN ('default', 'default-encryption')").all();
+    const allPlans = db.prepare("SELECT name, speed, price FROM plans WHERE name NOT IN ('default', 'default-encryption') ORDER BY price ASC, name ASC").all();
     const plansListText = allPlans.map(p => `• *${p.name}* (${p.speed}) - Rp ${Number(p.price).toLocaleString('id-ID')}/bln`).join('\n') || '• Paket LenxyNet Fiber';
 
     const baseUrl = getPortalBaseUrl(req);
@@ -865,7 +865,7 @@ app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
     let sendRes;
     if (type === 'promo') {
       // Dapatkan daftar paket aktif untuk dimasukkan ke variabel {plans}
-      const allPlans = db.prepare("SELECT name, speed, price FROM plans WHERE name NOT IN ('default', 'default-encryption')").all();
+      const allPlans = db.prepare("SELECT name, speed, price FROM plans WHERE name NOT IN ('default', 'default-encryption') ORDER BY price ASC, name ASC").all();
       const plansListText = allPlans.map(p => `• *${p.name}* (${p.speed}) - Rp ${Number(p.price).toLocaleString('id-ID')}/bln`).join('\n');
 
       // Ambil template dari settings jika tidak disediakan custom di body
@@ -1023,11 +1023,44 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
+// Helper ekstrak harga paket dari comment MikroTik atau pola nama profile
+function extractPriceFromProfile(p) {
+  // 1. Prioritas Utama: Baca Comment dari MikroTik (misal: 150000, 150.000, 150k, 150rb)
+  if (p && p.comment !== undefined && p.comment !== null) {
+    const strComment = String(p.comment).trim();
+    if (strComment !== '') {
+      // Cek pola angka + 'k' atau 'rb' (misal: 150k, 150rb, 59k)
+      const kMatch = strComment.match(/^(\d+)\s*(k|rb)$/i);
+      if (kMatch) {
+        return parseInt(kMatch[1], 10) * 1000;
+      }
+      // Ambil hanya digit angka (misal "150000", "150.000", "Rp 150.000")
+      const digits = strComment.replace(/\D/g, '');
+      if (digits) {
+        const val = parseInt(digits, 10);
+        if (!isNaN(val) && val > 0) return val;
+      }
+    }
+  }
+
+  // 2. Fallback: Ekstrak dari Nama Profile jika comment kosong (misal "150rb" atau "150k")
+  if (p && p.name) {
+    const nameMatch = String(p.name).match(/(\d+)\s*(rb|k)/i);
+    if (nameMatch) {
+      return parseInt(nameMatch[1], 10) * 1000;
+    }
+  }
+
+  // 3. Nilai default jika comment dan nama tidak mengandung angka harga
+  return 100000;
+}
+
 // Get Available Profiles/Plans (Real-Time from MikroTik)
 app.get('/api/admin/plans', async (req, res) => {
   const isConn = db.prepare("SELECT value FROM settings WHERE key = 'router_connected'").get()?.value === 'true';
   if (!isConn) {
-    return res.json([]);
+    const offlinePlans = db.prepare('SELECT * FROM plans ORDER BY price ASC, name ASC').all();
+    return res.json(offlinePlans);
   }
   try {
     // Ambil profile langsung dari MikroTik
@@ -1038,23 +1071,30 @@ app.get('/api/admin/plans', async (req, res) => {
     // Filter hanya profile paket asli (Hilangkan default dan default-encryption)
     const validProfiles = mikrotikProfiles.filter(p => p.name !== 'default' && p.name !== 'default-encryption');
     
-    // Sinkronkan ke tabel plans
+    // Sinkronkan ke tabel plans (otomatis update harga dari comment MikroTik)
     validProfiles.forEach(p => {
-      const speed = p.rateLimit || 'Unlimited';
+      const speed = p['rate-limit'] || p.rateLimit || 'Unlimited';
+      const price = extractPriceFromProfile(p);
       const existing = db.prepare('SELECT id FROM plans WHERE profile = ?').get(p.name);
-      if (!existing) {
-        let price = 100000;
-        const match = p.name.match(/(\d+)rb/i);
-        if (match) price = parseInt(match[1]) * 1000;
+      if (existing) {
+        db.prepare('UPDATE plans SET price = ?, speed = ?, name = ? WHERE id = ?').run(price, speed, p.name, existing.id);
+      } else {
         db.prepare('INSERT INTO plans (name, profile, price, speed) VALUES (?, ?, ?, ?)').run(p.name, p.name, price, speed);
       }
     });
 
-    const plans = db.prepare('SELECT * FROM plans WHERE profile IN (' + validProfiles.map(p => `'${p.name}'`).join(',') + ')').all();
+    const profileNames = validProfiles.map(p => p.name);
+    let plans = [];
+    if (profileNames.length > 0) {
+      const placeholders = profileNames.map(() => '?').join(',');
+      plans = db.prepare(`SELECT * FROM plans WHERE profile IN (${placeholders}) ORDER BY price ASC, name ASC`).all(...profileNames);
+    } else {
+      plans = db.prepare('SELECT * FROM plans ORDER BY price ASC, name ASC').all();
+    }
     res.json(plans);
   } catch (err) {
-    // Fallback ke database jika MikroTik timeout
-    const plans = db.prepare('SELECT * FROM plans').all();
+    // Fallback ke database jika MikroTik timeout, urutkan harga terendah
+    const plans = db.prepare('SELECT * FROM plans ORDER BY price ASC, name ASC').all();
     res.json(plans);
   }
 });
