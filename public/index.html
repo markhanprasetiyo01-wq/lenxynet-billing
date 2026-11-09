@@ -213,6 +213,15 @@
             <i class="fa-solid fa-gear text-slate-500 group-hover:text-white text-[10px]"></i>
           </button>
 
+          <!-- Template Pesan WhatsApp Button -->
+          <button onclick="openMessageTemplatesModal()" id="msg-templates-btn"
+            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 group"
+            title="Kelola Semua Template Pesan WhatsApp di Database">
+            <i class="fa-brands fa-whatsapp text-emerald-400 group-hover:text-emerald-300 text-[13px] transition"></i>
+            <span class="text-slate-300 text-[11px]">Template WA</span>
+            <i class="fa-solid fa-gear text-slate-500 group-hover:text-white text-[10px]"></i>
+          </button>
+
           <!-- Admin Profile -->
           <button onclick="openAdminAccountModal()"
             class="px-3 py-1.5 text-xs font-semibold bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-xl transition flex items-center gap-1.5 active:scale-95"
@@ -305,6 +314,13 @@
             class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
             <span class="flex items-center gap-2.5"><i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Integrasi
               Telegram & Cloud Backup</span>
+            <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+          </button>
+
+          <button onclick="openMessageTemplatesModal(); toggleMobileNav();"
+            class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
+            <span class="flex items-center gap-2.5"><i class="fa-brands fa-whatsapp text-emerald-400 text-sm"></i> Kelola
+              Template Pesan WhatsApp</span>
             <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
           </button>
 
@@ -1249,7 +1265,10 @@
               <label class="font-semibold text-slate-300">
                 Template Cepat Siap Pakai:
               </label>
-              <span class="text-[10px] text-slate-400">Otomatis mengisi teks</span>
+              <button type="button" onclick="openMessageTemplatesModal()"
+                class="text-[11px] text-emerald-400 hover:text-emerald-300 hover:underline flex items-center gap-1 transition">
+                <i class="fa-solid fa-pen-to-square"></i> Kelola Template di Database
+              </button>
             </div>
             <select id="wa-template-preset-select" onchange="applyWATemplatePreset(this.value)"
               class="w-full bg-slate-950 border border-slate-700 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-semibold">
@@ -1714,6 +1733,79 @@
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Modal Kelola Template Pesan WhatsApp & Broadcast (Database) -->
+    <div id="messageTemplatesModal"
+      class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
+      <div
+        class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl modal-enter relative overflow-hidden">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between px-5 py-4 border-b border-brand-border bg-slate-900/60 shrink-0">
+          <div class="flex items-center space-x-3">
+            <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+              <i class="fa-brands fa-whatsapp text-lg"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <span>Kelola Template Pesan WhatsApp</span>
+                <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SQLite DB</span>
+              </h3>
+              <p class="text-xs text-slate-400">Seluruh template pesan tersimpan di database dan dapat diubah kapan saja</p>
+            </div>
+          </div>
+          <button onclick="closeMessageTemplatesModal()"
+            class="w-8 h-8 rounded-xl bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition">
+            <i class="fa-solid fa-xmark text-sm"></i>
+          </button>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="px-5 py-3 border-b border-brand-border/60 bg-slate-950/60 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div class="flex items-center space-x-1.5 overflow-x-auto text-xs py-0.5" id="msg-tpl-filter-btns">
+            <button type="button" onclick="filterMessageTemplates('all')" id="btn-tpl-filter-all"
+              class="px-3 py-1.5 rounded-lg font-bold bg-sky-600 text-white transition active:scale-95 shadow-sm">
+              Semua (<span id="tpl-count-all">12</span>)
+            </button>
+            <button type="button" onclick="filterMessageTemplates('system')" id="btn-tpl-filter-system"
+              class="px-3 py-1.5 rounded-lg font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 transition active:scale-95">
+              Tagihan & Sistem (<span id="tpl-count-system">5</span>)
+            </button>
+            <button type="button" onclick="filterMessageTemplates('notice')" id="btn-tpl-filter-notice"
+              class="px-3 py-1.5 rounded-lg font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 transition active:scale-95">
+              Broadcast Pemberitahuan (<span id="tpl-count-notice">3</span>)
+            </button>
+            <button type="button" onclick="filterMessageTemplates('promo')" id="btn-tpl-filter-promo"
+              class="px-3 py-1.5 rounded-lg font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 transition active:scale-95">
+              Broadcast Promosi (<span id="tpl-count-promo">4</span>)
+            </button>
+          </div>
+
+          <div class="relative w-full sm:w-56">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+            <input type="text" id="tpl-search-input" oninput="onSearchMessageTemplates(this.value)" placeholder="Cari template..."
+              class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition">
+          </div>
+        </div>
+
+        <!-- Body / Templates List -->
+        <div class="p-4 sm:p-5 overflow-y-auto space-y-4 flex-1 custom-scrollbar" id="message-templates-list-container">
+          <div class="py-12 text-center text-slate-400 text-xs">
+            <i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat template dari database...
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="px-5 py-3 border-t border-brand-border bg-slate-900/60 flex items-center justify-between text-xs shrink-0">
+          <span class="text-slate-400 text-[11px] hidden sm:inline">💡 Tips: Klik badge variabel seperti <code class="text-emerald-400 font-mono font-bold bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-500/30">{nama}</code> untuk menyisipkan otomatis ke kursor teks.</span>
+          <button type="button" onclick="closeMessageTemplatesModal()"
+            class="px-4 py-1.5 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition ml-auto">
+            Tutup
+          </button>
+        </div>
+
       </div>
     </div>
 
@@ -3440,6 +3532,9 @@ _LenxyNet Fiber_`
       const modal = document.getElementById('sendWAModal');
       modal.classList.remove('hidden');
 
+      // Ambil template terkini dari database SQLite
+      loadMessageTemplates();
+
       // Reset progress
       const progressBox = document.getElementById('wa-broadcast-progress-box');
       if (progressBox) progressBox.classList.add('hidden');
@@ -3759,6 +3854,268 @@ _LenxyNet Fiber_`
       } finally {
         btn.innerHTML = origHtml;
         btn.disabled = false;
+      }
+    }
+
+    // === MANAJEMEN TEMPLATE PESAN WHATSAPP & BROADCAST (DATABASE SQLITE) ===
+    let cachedMessageTemplates = [];
+    let currentTplCategoryFilter = 'all';
+    let currentTplSearchQuery = '';
+
+    function openMessageTemplatesModal() {
+      document.getElementById('messageTemplatesModal').classList.remove('hidden');
+      loadMessageTemplates();
+    }
+
+    function closeMessageTemplatesModal() {
+      document.getElementById('messageTemplatesModal').classList.add('hidden');
+    }
+
+    async function loadMessageTemplates() {
+      const container = document.getElementById('message-templates-list-container');
+      if (!cachedMessageTemplates.length) {
+        container.innerHTML = '<div class="py-12 text-center text-slate-400 text-xs"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Memuat template dari database...</div>';
+      }
+
+      try {
+        const res = await fetch('/api/admin/message-templates');
+        if (!res.ok) throw new Error('Gagal memuat template pesan dari server');
+        const data = await res.json();
+        cachedMessageTemplates = Array.isArray(data) ? data : [];
+
+        // Update counts
+        const countAll = cachedMessageTemplates.length;
+        const countSystem = cachedMessageTemplates.filter(t => t.category === 'system').length;
+        const countNotice = cachedMessageTemplates.filter(t => t.category === 'notice').length;
+        const countPromo = cachedMessageTemplates.filter(t => t.category === 'promo').length;
+
+        const elAll = document.getElementById('tpl-count-all');
+        const elSys = document.getElementById('tpl-count-system');
+        const elNot = document.getElementById('tpl-count-notice');
+        const elPro = document.getElementById('tpl-count-promo');
+
+        if (elAll) elAll.innerText = countAll;
+        if (elSys) elSys.innerText = countSystem;
+        if (elNot) elNot.innerText = countNotice;
+        if (elPro) elPro.innerText = countPromo;
+
+        // Sinkronkan ke WA_PRESET_TEMPLATES agar modal broadcast selalu pakai teks database terbaru
+        const notices = cachedMessageTemplates.filter(t => t.category === 'notice');
+        const promos = cachedMessageTemplates.filter(t => t.category === 'promo');
+        if (notices.length) {
+          WA_PRESET_TEMPLATES.notice = notices.map(t => ({ id: t.id, title: t.title, text: t.content }));
+        }
+        if (promos.length) {
+          WA_PRESET_TEMPLATES.promo = promos.map(t => ({ id: t.id, title: t.title, text: t.content }));
+        }
+        populateWATemplatesDropdown();
+
+        renderMessageTemplatesList();
+      } catch (err) {
+        container.innerHTML = `<div class="py-12 text-center text-rose-400 text-xs"><i class="fa-solid fa-triangle-exclamation mr-1"></i> ${err.message}</div>`;
+      }
+    }
+
+    function filterMessageTemplates(category) {
+      currentTplCategoryFilter = category;
+      const btns = ['all', 'system', 'notice', 'promo'];
+      btns.forEach(b => {
+        const btn = document.getElementById(`btn-tpl-filter-${b}`);
+        if (!btn) return;
+        if (b === category) {
+          btn.className = 'px-3 py-1.5 rounded-lg font-bold bg-sky-600 text-white transition active:scale-95 shadow-sm';
+        } else {
+          btn.className = 'px-3 py-1.5 rounded-lg font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 transition active:scale-95';
+        }
+      });
+      renderMessageTemplatesList();
+    }
+
+    function onSearchMessageTemplates(query) {
+      currentTplSearchQuery = (query || '').toLowerCase().trim();
+      renderMessageTemplatesList();
+    }
+
+    function renderMessageTemplatesList() {
+      const container = document.getElementById('message-templates-list-container');
+      if (!container) return;
+
+      let filtered = cachedMessageTemplates;
+      if (currentTplCategoryFilter !== 'all') {
+        filtered = filtered.filter(t => t.category === currentTplCategoryFilter);
+      }
+      if (currentTplSearchQuery) {
+        filtered = filtered.filter(t => 
+          (t.title && t.title.toLowerCase().includes(currentTplSearchQuery)) ||
+          (t.id && t.id.toLowerCase().includes(currentTplSearchQuery)) ||
+          (t.content && t.content.toLowerCase().includes(currentTplSearchQuery))
+        );
+      }
+
+      if (!filtered.length) {
+        container.innerHTML = `
+          <div class="py-12 text-center text-slate-400 text-xs">
+            <i class="fa-solid fa-file-circle-xmark text-2xl text-slate-600 mb-2 block"></i>
+            Tidak ada template pesan yang cocok dengan filter atau pencarian.
+          </div>
+        `;
+        return;
+      }
+
+      const categoryLabels = {
+        system: { label: 'Tagihan & Sistem', badge: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+        notice: { label: 'Pemberitahuan', badge: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+        promo: { label: 'Promosi', badge: 'bg-sky-500/15 text-sky-300 border-sky-500/30' }
+      };
+
+      container.innerHTML = filtered.map(t => {
+        const catInfo = categoryLabels[t.category] || { label: t.category, badge: 'bg-slate-700 text-slate-300 border-slate-600' };
+        const vars = (t.variables || '').split(',').map(v => v.trim()).filter(Boolean);
+
+        const varBadges = vars.map(v => `
+          <button type="button" onclick="insertTplVariable('${t.id}', '${v}')"
+            class="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-emerald-950 text-slate-300 hover:text-emerald-300 border border-slate-700/80 hover:border-emerald-500/40 font-mono text-[11px] transition active:scale-95"
+            title="Klik untuk menyisipkan ${v} ke dalam teks">
+            ${v}
+          </button>
+        `).join('');
+
+        return `
+          <div class="p-4 sm:p-5 rounded-2xl border border-brand-border/80 bg-slate-900/50 hover:border-slate-600/80 transition space-y-3 shadow-md" id="card-tpl-${t.id}">
+            <!-- Header Card -->
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-brand-border/60">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-bold text-white text-xs sm:text-sm">${t.title}</span>
+                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full border ${catInfo.badge}">
+                  ${catInfo.label}
+                </span>
+                <span class="text-[10px] font-mono text-slate-400 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">
+                  ${t.id}
+                </span>
+              </div>
+              <div class="text-[10px] text-slate-400">
+                Diperbarui: <span class="font-mono text-slate-300">${t.updated_at ? new Date(t.updated_at).toLocaleString('id-ID') : '-'}</span>
+              </div>
+            </div>
+
+            <!-- Textarea -->
+            <div class="relative">
+              <textarea id="tpl-content-${t.id}" rows="7"
+                class="w-full bg-slate-950 border border-slate-700/80 rounded-xl p-3 text-xs text-white font-mono leading-relaxed focus:outline-none focus:border-emerald-500 transition custom-scrollbar">${t.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+            </div>
+
+            <!-- Variabel Tersedia & Aksi -->
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                <span class="text-[11px] text-slate-400 mr-1 flex items-center gap-1">
+                  <i class="fa-solid fa-code text-emerald-400 text-[10px]"></i> Variabel:
+                </span>
+                ${varBadges}
+              </div>
+
+              <div class="flex items-center space-x-2 shrink-0 ml-auto">
+                <button type="button" onclick="resetMessageTemplate('${t.id}')"
+                  class="px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition active:scale-95 flex items-center gap-1.5"
+                  title="Kembalikan template ke format bawaan">
+                  <i class="fa-solid fa-arrow-rotate-left text-[11px]"></i>
+                  <span class="hidden sm:inline">Reset Default</span>
+                </button>
+                <button type="button" id="btn-save-tpl-${t.id}" onclick="saveMessageTemplate('${t.id}')"
+                  class="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm shadow-emerald-600/30 transition active:scale-95 flex items-center gap-1.5">
+                  <i class="fa-solid fa-floppy-disk text-[11px]"></i>
+                  <span>Simpan Perubahan</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function insertTplVariable(id, variableName) {
+      const textarea = document.getElementById(`tpl-content-${id}`);
+      if (!textarea) return;
+
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+
+      textarea.value = text.substring(0, start) + variableName + text.substring(end);
+      textarea.selectionStart = textarea.selectionEnd = start + variableName.length;
+      textarea.focus();
+    }
+
+    async function saveMessageTemplate(id) {
+      const textarea = document.getElementById(`tpl-content-${id}`);
+      if (!textarea) return;
+      const content = textarea.value.trim();
+      if (!content) {
+        showToast('Isi template tidak boleh kosong!', 'error');
+        return;
+      }
+
+      const btn = document.getElementById(`btn-save-tpl-${id}`);
+      const origHtml = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Menyimpan...';
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`/api/admin/message-templates/${encodeURIComponent(id)}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(data.message || 'Template pesan berhasil disimpan ke database!', 'success');
+          // Update cached
+          const found = cachedMessageTemplates.find(t => t.id === id);
+          if (found) {
+            found.content = content;
+            found.updated_at = new Date().toISOString();
+          }
+          // Update WA_PRESET_TEMPLATES jika notice/promo
+          if (found && found.category === 'notice') {
+            const p = WA_PRESET_TEMPLATES.notice.find(t => t.id === id);
+            if (p) p.text = content;
+          } else if (found && found.category === 'promo') {
+            const p = WA_PRESET_TEMPLATES.promo.find(t => t.id === id);
+            if (p) p.text = content;
+          }
+        } else {
+          showToast(data.error || 'Gagal menyimpan template', 'error');
+        }
+      } catch (err) {
+        showToast('Koneksi gagal: ' + err.message, 'error');
+      } finally {
+        btn.innerHTML = origHtml;
+        btn.disabled = false;
+      }
+    }
+
+    async function resetMessageTemplate(id) {
+      if (!confirm(`Kembalikan isi template '${id}' ke format standar awal?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/admin/message-templates/reset/${encodeURIComponent(id)}`, {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(data.message || 'Template berhasil di-reset ke format bawaan!', 'success');
+          const textarea = document.getElementById(`tpl-content-${id}`);
+          if (textarea && data.content) {
+            textarea.value = data.content;
+          }
+          // Reload fresh data
+          loadMessageTemplates();
+        } else {
+          showToast(data.error || 'Gagal mereset template', 'error');
+        }
+      } catch (err) {
+        showToast('Gagal mereset: ' + err.message, 'error');
       }
     }
 

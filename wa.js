@@ -150,93 +150,67 @@ async function sendNotificationToAdmin(text) {
   return { success: sentCount > 0, sentCount };
 }
 
-// Template 1: Reminder H-3 Sebelum Jatuh Tempo
+// Template 1: Reminder H-3 Sebelum Jatuh Tempo (Dinamis dari Database)
 async function sendReminderHMinus3(customer, bill, portalUrl) {
-  const message = `Halo Bapak/Ibu *${customer.name}*,
-
-Pemberitahuan dari *LenxyNet Fiber*.
-Tagihan internet bulanan Anda akan jatuh tempo dalam *3 hari lagi*:
-
-📄 *Detail Tagihan:*
-• Nama Pelanggan: *Bapak/Ibu ${customer.name}*
-• Paket: *${customer.plan_name || 'Internet PPPoE'}*
-• Jatuh Tempo: *Tgl ${customer.due_date}*
-• Total Tagihan: *Rp ${Number(bill.amount).toLocaleString('id-ID')}*
-
-Silakan lakukan pembayaran lebih awal agar terhindar dari pemutusan layanan otomatis. Anda dapat membayar langsung via QRIS melalui tautan berikut:
-👉 ${portalUrl}
-
-💡 _Tips: Jika tautan di atas belum bisa diklik, simpan nomor ini ke kontak atau balas pesan ini (ketik OK)._
-
-Terima kasih atas kerja samanya.
-_Customer Service LenxyNet_`;
+  const template = db.getMessageTemplate('reminder_hminus3');
+  const message = template
+    .replace(/{nama}/gi, customer.name || 'Pelanggan')
+    .replace(/{name}/gi, customer.name || 'Pelanggan')
+    .replace(/{username}/gi, customer.pppoe_username || '-')
+    .replace(/{paket}/gi, customer.plan_name || 'Internet PPPoE')
+    .replace(/{jatuh_tempo}/gi, String(customer.due_date || '10'))
+    .replace(/{nominal}/gi, `Rp ${Number(bill.amount).toLocaleString('id-ID')}`)
+    .replace(/{portal_url}/gi, portalUrl);
 
   return await sendWhatsAppMessage(customer.phone, message);
 }
 
-// Template 2: Reminder H+1 Setelah Jatuh Tempo (Keterlambatan & Peringatan Isolir)
+// Template 2: Reminder H+1 Setelah Jatuh Tempo (Dinamis dari Database)
 async function sendReminderHPlus1(customer, bill, toleranceDays, portalUrl) {
-  const message = `PEMBERITAHUAN KETERLAMBATAN
-Kepada Yth. Bapak/Ibu *${customer.name}*,
-
-Tagihan internet *LenxyNet* Anda telah melewati tanggal jatuh tempo (Tgl ${customer.due_date}).
-
-📄 *Rincian Tagihan Tertunggak:*
-• Total: *Rp ${Number(bill.amount).toLocaleString('id-ID')}*
-• Masa Toleransi: *${toleranceDays} Hari*
-
-⚠️ *Peringatan:* Jika pembayaran belum diselesaikan hingga masa toleransi berakhir, sistem kami akan melakukan *pemutusan koneksi internet otomatis (Isolir)*.
-
-Bayar sekarang menggunakan QRIS instan:
-👉 ${portalUrl}
-
-💡 _Tips: Jika tautan di atas belum bisa diklik, simpan nomor ini ke kontak atau balas pesan ini (ketik OK)._
-
-Abaikan pesan ini jika Anda sudah melakukan pembayaran.
-_Layanan Pelanggan LenxyNet_`;
+  const template = db.getMessageTemplate('reminder_hplus1');
+  const message = template
+    .replace(/{nama}/gi, customer.name || 'Pelanggan')
+    .replace(/{name}/gi, customer.name || 'Pelanggan')
+    .replace(/{username}/gi, customer.pppoe_username || '-')
+    .replace(/{paket}/gi, customer.plan_name || 'Internet PPPoE')
+    .replace(/{jatuh_tempo}/gi, String(customer.due_date || '10'))
+    .replace(/{nominal}/gi, `Rp ${Number(bill.amount).toLocaleString('id-ID')}`)
+    .replace(/{toleransi}/gi, String(toleranceDays || 1))
+    .replace(/{portal_url}/gi, portalUrl);
 
   return await sendWhatsAppMessage(customer.phone, message);
 }
 
-// Template 3: Ucapan Terima Kasih Saat Sudah Benar-Benar Membayar (LUNAS)
+// Template 3: Ucapan Terima Kasih Saat Sudah Benar-Benar Membayar (LUNAS) (Dinamis dari Database)
 async function sendPaymentSuccessNotice(customer, bill) {
   const periodText = bill.durationMonths && bill.durationMonths > 1 
     ? `${bill.period} (${bill.durationMonths} Bulan Sekaligus)`
     : bill.period;
 
-  const message = `PEMBAYARAN BERHASIL & DITERIMA ✅
-Halo Bapak/Ibu *${customer.name}*,
-
-Terima kasih! Pembayaran tagihan internet *LenxyNet* Anda telah kami terima:
-
-📄 *Bukti Pembayaran:*
-• ID Pelanggan: *${customer.pppoe_username}*
-• Paket: *${customer.plan_name || 'Internet PPPoE'}*
-• Durasi / Periode: *${periodText}*
-• Total Bayar: *Rp ${Number(bill.amount).toLocaleString('id-ID')}*
-• Metode: *${bill.payment_method || 'QRIS Instan'}*
-• Status: *LUNAS*
-
-Layanan internet Anda aktif normal hingga masa aktif berikutnya. Selamat menikmati koneksi internet berkecepatan tinggi dari LenxyNet!
-
-_Salam hangat, Tim LenxyNet Fiber_`;
+  const template = db.getMessageTemplate('payment_success');
+  const message = template
+    .replace(/{nama}/gi, customer.name || 'Pelanggan')
+    .replace(/{name}/gi, customer.name || 'Pelanggan')
+    .replace(/{username}/gi, customer.pppoe_username || '-')
+    .replace(/{paket}/gi, customer.plan_name || 'Internet PPPoE')
+    .replace(/{durasi}/gi, periodText)
+    .replace(/{periode}/gi, periodText)
+    .replace(/{nominal}/gi, `Rp ${Number(bill.amount).toLocaleString('id-ID')}`)
+    .replace(/{metode}/gi, bill.payment_method || 'QRIS Instan');
 
   return await sendWhatsAppMessage(customer.phone, message);
 }
 
-// Template 4: Info Layanan, Daftar Paket & Event Promosi (Bisa dicustom)
+// Template 4: Info Layanan, Daftar Paket & Event Promosi (Dinamis dari Database)
 async function sendPromoNotice(customer, customMessage, plansList, portalUrl) {
-  let message = customMessage;
-  if (!message) {
-    message = `Halo Bapak/Ibu *{name}*, dapatkan promo internet terbaik di {portal_url}!`;
-  }
+  const template = customMessage || db.getMessageTemplate('promo_general');
 
-  // Replace variable placeholders
-  message = message
-    .replace(/{name}/g, customer.name || 'Pelanggan')
-    .replace(/{username}/g, customer.pppoe_username || '-')
-    .replace(/{portal_url}/g, portalUrl)
-    .replace(/{plans}/g, plansList || '• Paket Hemat LenxyNet Fiber');
+  const message = template
+    .replace(/{nama}/gi, customer.name || 'Pelanggan')
+    .replace(/{name}/gi, customer.name || 'Pelanggan')
+    .replace(/{username}/gi, customer.pppoe_username || '-')
+    .replace(/{portal_url}/gi, portalUrl)
+    .replace(/{plans}/gi, plansList || '• Paket Hemat LenxyNet Fiber');
 
   return await sendWhatsAppMessage(customer.phone, message);
 }

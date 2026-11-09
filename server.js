@@ -808,6 +808,87 @@ app.post('/api/admin/whatsapp/send-broadcast', requireAdminAuth, async (req, res
   }
 });
 
+// === API PENGELOLAAN TEMPLATE PESAN WHATSAPP & BROADCAST (DATABASE) ===
+
+// 1. Ambil Semua Template Pesan dari Database
+app.get('/api/admin/message-templates', requireAdminAuth, (req, res) => {
+  try {
+    const templates = db.prepare(`
+      SELECT * FROM message_templates 
+      ORDER BY 
+        CASE category 
+          WHEN 'system' THEN 1 
+          WHEN 'notice' THEN 2 
+          WHEN 'promo' THEN 3 
+          ELSE 4 
+        END, id ASC
+    `).all();
+    res.json(templates);
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal mengambil template pesan: ' + err.message });
+  }
+});
+
+// 2. Simpan Perubahan Template Pesan ke Database
+app.put('/api/admin/message-templates/:id', requireAdminAuth, (req, res) => {
+  try {
+    const { id } = req.params;
+    const { content, title } = req.body;
+    if (!content || typeof content !== 'string' || content.trim() === '') {
+      return res.status(400).json({ error: 'Isi template pesan tidak boleh kosong!' });
+    }
+
+    const existing = db.prepare('SELECT * FROM message_templates WHERE id = ?').get(id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Template pesan tidak ditemukan!' });
+    }
+
+    db.prepare(`
+      UPDATE message_templates 
+      SET content = ?, title = COALESCE(?, title), updated_at = datetime('now', 'localtime')
+      WHERE id = ?
+    `).run(content.trim(), title ? title.trim() : null, id);
+
+    // Sinkronkan ke settings promo_template jika yang diubah adalah promo_general
+    if (id === 'promo_general') {
+      db.prepare("INSERT INTO settings (key, value) VALUES ('promo_template', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .run(content.trim());
+    }
+
+    logActivity('CONFIG_CHANGE', `Template pesan WhatsApp '${existing.title}' berhasil diperbarui`, 'ADMIN');
+    res.json({ success: true, message: `Template '${existing.title}' berhasil disimpan ke database!` });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menyimpan template: ' + err.message });
+  }
+});
+
+// 3. Reset Template Tertentu ke Nilai Default Bawaan
+app.post('/api/admin/message-templates/reset/:id', requireAdminAuth, (req, res) => {
+  try {
+    const { id } = req.params;
+    const defaultTpl = db.DEFAULT_MESSAGE_TEMPLATES?.find(t => t.id === id);
+    if (!defaultTpl) {
+      return res.status(404).json({ error: 'Template default tidak ditemukan!' });
+    }
+
+    db.prepare(`
+      UPDATE message_templates 
+      SET content = ?, title = ?, variables = ?, updated_at = datetime('now', 'localtime')
+      WHERE id = ?
+    `).run(defaultTpl.content, defaultTpl.title, defaultTpl.variables, id);
+
+    if (id === 'promo_general') {
+      db.prepare("INSERT INTO settings (key, value) VALUES ('promo_template', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .run(defaultTpl.content);
+    }
+
+    logActivity('CONFIG_CHANGE', `Template pesan WhatsApp '${defaultTpl.title}' di-reset ke default`, 'ADMIN');
+    res.json({ success: true, message: `Template '${defaultTpl.title}' berhasil di-reset ke format bawaan!`, content: defaultTpl.content });
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal mereset template: ' + err.message });
+  }
+});
+
 // Kirim WA Manual per User dari Dashboard (Bisa by Customer ID atau PPPoE Username)
 app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
   if (!isMikrotikConnected()) {
@@ -1577,14 +1658,12 @@ app.post('/api/user/request-otp', async (req, res) => {
         last_requested_at = datetime('now', 'localtime')
     `).run(cleanPhone, otp, cust.id, expiresAt);
 
-    // 4. Kirim pesan OTP via Bot WhatsApp
-    const otpMessage = `*KODE VERIFIKASI LENXYNET* 🔐
-Halo Bapak/Ibu *${cust.name}*,
-
-Kode OTP untuk masuk ke Portal Pelanggan Anda adalah:
-👉 *${otp}*
-
-_Kode ini bersifat rahasia dan hanya berlaku selama 5 menit. Jangan berikan kode ini kepada siapa pun demi keamanan akun Anda._`;
+    // 4. Kirim pesan OTP via Bot WhatsApp (Dinamis dari Database)
+    const otpTemplate = db.getMessageTemplate('otp');
+    const otpMessage = otpTemplate
+      .replace(/{nama}/gi, cust.name || 'Pelanggan')
+      .replace(/{name}/gi, cust.name || 'Pelanggan')
+      .replace(/{otp}/gi, otp);
 
     const sendRes = await require('./wa').sendWhatsAppMessage(cust.phone, otpMessage);
     if (!sendRes.success) {
@@ -2291,15 +2370,15 @@ app.post('/api/admin/payments/:id/reject', requireAdminAuth, requireMikrotikConn
         const baseUrl = getPortalBaseUrl(req);
         const phoneParam = (bill.customer_phone && bill.customer_phone !== '-') ? bill.customer_phone : bill.pppoe_username;
         const portalUrl = `${baseUrl}/user.html?phone=${encodeURIComponent(phoneParam)}`;
-        const rejectMsg = `Halo Bapak/Ibu *${bill.customer_name}*,\n\n` +
-          `Pemberitahuan dari *LenxyNet Fiber*.\n` +
-          `Mohon maaf, bukti pembayaran yang Anda unggah untuk periode *${bill.period}* sebesar *Rp ${bill.amount.toLocaleString('id-ID')}* belum dapat disetujui.\n\n` +
-          `❌ *Alasan Penolakan:* ${rejectReason}\n\n` +
-          `Silakan periksa mutasi rekening / riwayat transfer Anda dan unggah bukti transfer yang benar melalui tautan portal berikut:\n` +
-          `👉 ${portalUrl}\n\n` +
-          `💡 _Tips: Jika tautan di atas belum bisa diklik, simpan nomor ini ke kontak atau balas pesan ini (ketik OK)._\n\n` +
-          `Hubungi Customer Service jika Anda membutuhkan bantuan lebih lanjut.\n` +
-          `_Customer Service LenxyNet_`;
+        const rejectTemplate = db.getMessageTemplate('payment_rejected');
+        const rejectMsg = rejectTemplate
+          .replace(/{nama}/gi, bill.customer_name || 'Pelanggan')
+          .replace(/{name}/gi, bill.customer_name || 'Pelanggan')
+          .replace(/{username}/gi, bill.pppoe_username || '-')
+          .replace(/{periode}/gi, bill.period)
+          .replace(/{nominal}/gi, `Rp ${bill.amount.toLocaleString('id-ID')}`)
+          .replace(/{alasan}/gi, rejectReason)
+          .replace(/{portal_url}/gi, portalUrl);
 
         await sendWhatsAppMessage(bill.customer_phone, rejectMsg);
       } catch (errWa) {
