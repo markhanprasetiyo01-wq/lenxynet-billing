@@ -219,6 +219,22 @@
               <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
                 Konfigurasi Sistem
               </div>
+
+              <!-- Quick Toggle Cron Job Auto-Isolir -->
+              <div class="px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-2 min-w-0">
+                  <i class="fa-solid fa-clock-rotate-left text-amber-400 text-xs shrink-0"></i>
+                  <div class="truncate">
+                    <div class="font-semibold text-white text-xs truncate">Cron Job Auto-Isolir</div>
+                    <div class="text-[9px] text-emerald-400 font-medium truncate" id="nav-cron-status-text">Aktif (00:01 & 08:30)</div>
+                  </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+                  <input type="checkbox" id="nav-cron-toggle" onchange="toggleCronJob(this.checked)" class="sr-only peer" checked>
+                  <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+
               <button onclick="openRouterSettingsModal(); closeNavDropdowns();"
                 class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center gap-2.5 transition">
                 <i class="fa-solid fa-server text-sky-400 w-4 text-center"></i>
@@ -349,6 +365,23 @@
                 class="text-slate-300 font-mono font-bold text-[11px] truncate">Offline</span>
             </div>
           </button>
+        </div>
+
+        <!-- Quick Toggle Cron Job Mobile -->
+        <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <i class="fa-solid fa-clock-rotate-left text-xs"></i>
+            </div>
+            <div class="truncate">
+              <span class="text-xs font-bold text-white block truncate">Cron Job Auto-Isolir</span>
+              <span class="text-[10px] text-emerald-400 font-medium truncate" id="mobile-cron-status-text">Aktif: 00:01 & 08:30 WIB</span>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+            <input type="checkbox" id="mobile-cron-toggle" onchange="toggleCronJob(this.checked)" class="sr-only peer" checked>
+            <div class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
+          </label>
         </div>
 
         <!-- Action Links & Settings in Mobile Drawer -->
@@ -551,6 +584,18 @@
                 class="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-semibold shadow transition active:scale-95 shrink-0">
                 Simpan
               </button>
+            </div>
+
+            <!-- Toggle Switch Cron Job Auto-Isolir -->
+            <div class="mt-3 pt-2.5 border-t border-sky-800/40 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" id="cron-status-dot"></span>
+                <span class="text-[10px] sm:text-[11px] font-semibold text-emerald-400 truncate" id="cron-status-text">Cron Job: Aktif (00:01)</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2" title="Klik untuk On/Off Jadwal Otomatis Cron Job">
+                <input type="checkbox" id="cron-job-toggle" onchange="toggleCronJob(this.checked)" class="sr-only peer" checked>
+                <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+              </label>
             </div>
           </div>
 
@@ -2702,6 +2747,10 @@
         document.getElementById('stat-unpaid-count').innerText = data.unpaidCount;
         document.getElementById('input-tolerance').value = data.toleranceDays;
 
+        // Render Status Toggle Cron Job
+        const isCronOn = (data.cronEnabled !== false);
+        updateCronJobUI(isCronOn);
+
         isRouterConnected = (data.routerConnected === true);
         if (!isRouterConnected) {
           rawCustomersList = [];
@@ -3473,6 +3522,67 @@
       });
       if (res.ok) {
         showToast('Toleransi jatuh tempo disimpan: ' + days + ' hari', 'success');
+        loadStats();
+      }
+    }
+
+    // === CRON JOB MASTER TOGGLE CONTROLLER ===
+    function updateCronJobUI(isCronOn) {
+      const toggleMain = document.getElementById('cron-job-toggle');
+      const toggleNav = document.getElementById('nav-cron-toggle');
+      const toggleMobile = document.getElementById('mobile-cron-toggle');
+      const statusDot = document.getElementById('cron-status-dot');
+      const statusText = document.getElementById('cron-status-text');
+      const navStatusText = document.getElementById('nav-cron-status-text');
+      const mobileStatusText = document.getElementById('mobile-cron-status-text');
+
+      if (toggleMain) toggleMain.checked = isCronOn;
+      if (toggleNav) toggleNav.checked = isCronOn;
+      if (toggleMobile) toggleMobile.checked = isCronOn;
+
+      if (statusDot) {
+        statusDot.className = isCronOn 
+          ? 'w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0' 
+          : 'w-2 h-2 rounded-full bg-rose-500 shrink-0';
+      }
+      if (statusText) {
+        statusText.innerText = isCronOn ? 'Cron Job: Aktif (00:01)' : 'Cron Job: Jeda (Nonaktif)';
+        statusText.className = isCronOn 
+          ? 'text-[10px] sm:text-[11px] font-semibold text-emerald-400 truncate' 
+          : 'text-[10px] sm:text-[11px] font-semibold text-rose-400 truncate';
+      }
+      if (navStatusText) {
+        navStatusText.innerText = isCronOn ? 'Aktif (00:01 & 08:30)' : 'Nonaktif (Otomasi Dijeda)';
+        navStatusText.className = isCronOn ? 'text-[9px] text-emerald-400 font-medium truncate' : 'text-[9px] text-rose-400 font-medium truncate';
+      }
+      if (mobileStatusText) {
+        mobileStatusText.innerText = isCronOn ? 'Aktif: 00:01 & 08:30 WIB' : 'Jeda: Otomasi Nonaktif';
+        mobileStatusText.className = isCronOn ? 'text-[10px] text-emerald-400 font-medium truncate' : 'text-[10px] text-rose-400 font-medium truncate';
+      }
+    }
+
+    async function toggleCronJob(enabled) {
+      updateCronJobUI(enabled);
+      try {
+        const res = await fetch('/api/admin/settings/cron-toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(
+            enabled
+              ? 'Cron Job DIAKTIFKAN. Auto-isolir (00:01 WIB) & WA reminder (08:30 WIB) akan berjalan otomatis.'
+              : 'Cron Job DINONAKTIFKAN (Jeda). Otomasi auto-isolir tidak akan berjalan sampai diaktifkan kembali.',
+            enabled ? 'success' : 'info'
+          );
+        } else {
+          showToast(data.error || 'Gagal mengubah status cron job', 'error');
+          loadStats();
+        }
+      } catch (err) {
+        showToast('Gagal menghubungi server', 'error');
         loadStats();
       }
     }

@@ -140,16 +140,34 @@ async function runAutoIsolirCheck(baseUrl) {
   return { success: true, isolatedCount, waHMinus3Count, waHPlus1Count };
 }
 
+// Helper: Cek apakah otomasi cron job diaktifkan di settings database
+function isCronEnabled() {
+  try {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'cron_enabled'").get();
+    return row ? row.value !== 'false' : true;
+  } catch (e) {
+    return true;
+  }
+}
+
 // Jadwal Otomatis: Berjalan setiap hari pada jam 08:00 pagi untuk WA Reminder dan 00:01 untuk Isolir
 function startCronJobs() {
   // Jam 00:01 WIB - Cek Isolir
   cron.schedule('1 0 * * *', async () => {
+    if (!isCronEnabled()) {
+      console.log('[Cron Job] Dilewati: Otomasi Cron Job (Auto-Isolir) sedang NONAKTIF (OFF) di pengaturan.');
+      return;
+    }
     console.log('[Cron Job] Menjalankan Auto-Isolir tengah malam...');
     await runAutoIsolirCheck();
   });
 
   // Jam 08:30 Pagi WIB - Cek Pengiriman WA Reminder H-3 & H+1
   cron.schedule('30 8 * * *', async () => {
+    if (!isCronEnabled()) {
+      console.log('[Cron Job] Dilewati: Otomasi Cron Job (WA Reminder) sedang NONAKTIF (OFF) di pengaturan.');
+      return;
+    }
     console.log('[Cron Job] Menjalankan pengiriman WA Reminder pagi...');
     await runAutoIsolirCheck();
   });

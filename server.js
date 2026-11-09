@@ -1061,6 +1061,7 @@ app.get('/api/admin/stats', async (req, res) => {
     const waStatus = db.prepare("SELECT value FROM settings WHERE key = 'wa_status'").get()?.value || 'disconnected';
     const routerIp = db.prepare("SELECT value FROM settings WHERE key = 'router_ip'").get()?.value || '';
     const routerConnected = db.prepare("SELECT value FROM settings WHERE key = 'router_connected'").get()?.value === 'true';
+    const cronEnabled = db.prepare("SELECT value FROM settings WHERE key = 'cron_enabled'").get()?.value !== 'false';
 
     // Jika koneksi MikroTik terputus, jangan tampilkan data statistik apapun
     if (!routerConnected) {
@@ -1073,6 +1074,7 @@ app.get('/api/admin/stats', async (req, res) => {
         pendingCount: 0,
         conflictCount: 0,
         toleranceDays: parseInt(toleranceDays),
+        cronEnabled,
         waStatus,
         routerIp,
         routerConnected: false
@@ -1095,6 +1097,7 @@ app.get('/api/admin/stats', async (req, res) => {
       pendingCount: pendingBills.count || 0,
       conflictCount: conflicts.length,
       toleranceDays: parseInt(toleranceDays),
+      cronEnabled,
       waStatus,
       routerIp,
       routerConnected: true
@@ -1496,6 +1499,32 @@ app.post('/api/admin/settings/tolerance', (req, res) => {
   const { days } = req.body;
   db.prepare("UPDATE settings SET value = ? WHERE key = 'tolerance_days'").run(String(days));
   res.json({ success: true, toleranceDays: days });
+});
+
+// Toggle Master Status Cron Job (Auto-Isolir & WA Reminder Otomatis)
+app.post('/api/admin/settings/cron-toggle', requireAdminAuth, (req, res) => {
+  try {
+    const { enabled } = req.body;
+    const val = enabled ? 'true' : 'false';
+    const exists = db.prepare("SELECT key FROM settings WHERE key = 'cron_enabled'").get();
+    if (exists) {
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'cron_enabled'").run(val);
+    } else {
+      db.prepare("INSERT INTO settings (key, value) VALUES ('cron_enabled', ?)").run(val);
+    }
+    try {
+      db.prepare("INSERT INTO activity_logs (action, details, target, status) VALUES (?, ?, ?, ?)").run(
+        'CRON_TOGGLE',
+        `Otomasi Cron Job (Auto-Isolir & WA Reminder) diubah menjadi: ${enabled ? 'AKTIF (ON)' : 'NONAKTIF (OFF / Jeda)'}`,
+        'System Cron',
+        'success'
+      );
+    } catch(e) {}
+    console.log(`[Cron Job Setting] Status cron job otomatis diubah: ${enabled ? 'AKTIF (ON)' : 'NONAKTIF (OFF)'}`);
+    res.json({ success: true, cronEnabled: Boolean(enabled) });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // Fitur Darurat Admin: Ubah Status Tagihan Secara Manual (Lunas <-> Belum Bayar)

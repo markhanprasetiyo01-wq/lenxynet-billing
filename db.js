@@ -153,6 +153,9 @@ if (!checkSetting.get('telegram_chat_id')) {
 if (!checkSetting.get('telegram_backup_enabled')) {
   insertSetting.run('telegram_backup_enabled', 'false');
 }
+if (!checkSetting.get('cron_enabled')) {
+  insertSetting.run('cron_enabled', 'true');
+}
 if (!checkSetting.get('promo_template')) {
   const defaultPromo = `Halo *{name}*! 👋
 
