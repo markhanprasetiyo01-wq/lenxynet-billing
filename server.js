@@ -1366,7 +1366,22 @@ app.delete('/api/admin/customers/:id', requireMikrotikConnected, async (req, res
 });
 
 // Helper menghitung tanggal lengkap jatuh tempo berikutnya (Tgl Bulan Tahun)
-function formatNextDueDate(dueDate, lastPaidPeriod) {
+function formatNextDueDate(dueDate, lastPaidPeriod, comment = '') {
+  if (comment) {
+    const fullDateMatch = String(comment).trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (fullDateMatch) {
+      const monthNames = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      const day = fullDateMatch[1].padStart(2, '0');
+      const mIdx = parseInt(fullDateMatch[2], 10) - 1;
+      const yr = fullDateMatch[3];
+      const commentPeriod = `${yr}-${fullDateMatch[2].padStart(2, '0')}`;
+      if (mIdx >= 0 && mIdx <= 11) {
+        if (!lastPaidPeriod || lastPaidPeriod < commentPeriod) {
+          return `${day} ${monthNames[mIdx]} ${yr}`;
+        }
+      }
+    }
+  }
   if (!dueDate || dueDate === 0 || dueDate === 'null') {
     return 'Belum Diatur';
   }
@@ -1434,7 +1449,7 @@ app.get('/api/admin/customers', async (req, res) => {
 
       // Cek periode terakhir yang sudah lunas untuk pelanggan ini
       const lastPaid = db.prepare("SELECT period FROM bills WHERE customer_id = ? AND status = 'paid' ORDER BY period DESC LIMIT 1").get(c.id);
-      const nextDueFull = formatNextDueDate(c.due_date, lastPaid ? lastPaid.period : null);
+      const nextDueFull = formatNextDueDate(c.due_date, lastPaid ? lastPaid.period : null, c.comment || live.comment || '');
       const normPhone = normalizePhoneNumber(c.phone);
 
       return {
@@ -1828,7 +1843,7 @@ app.get('/api/user/portal', requireUserOrAdminAuth, async (req, res) => {
 
     // Dapatkan data tanggal jatuh tempo lengkap dan periode yang sudah dibayar
     const lastPaid = db.prepare("SELECT period FROM bills WHERE customer_id = ? AND status = 'paid' ORDER BY period DESC LIMIT 1").get(user.id);
-    const nextDueFull = formatNextDueDate(user.due_date, lastPaid ? lastPaid.period : null);
+    const nextDueFull = formatNextDueDate(user.due_date, lastPaid ? lastPaid.period : null, user.comment || '');
 
     // Dapatkan data live koneksi dari MikroTik untuk user ini
     let liveData = { isOnline: false, uptime: '-', remoteAddress: '-' };

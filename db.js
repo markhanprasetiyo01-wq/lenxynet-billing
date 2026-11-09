@@ -97,6 +97,9 @@ try {
 try {
   db.exec("ALTER TABLE bills ADD COLUMN rejection_reason TEXT;");
 } catch (e) {}
+try {
+  db.exec("ALTER TABLE customers ADD COLUMN comment TEXT;");
+} catch (e) {}
 
 // Seed default settings if empty
 const checkSetting = db.prepare('SELECT value FROM settings WHERE key = ?');

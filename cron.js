@@ -64,10 +64,24 @@ async function runAutoIsolirCheck(baseUrl) {
       // Pelanggan yang belum diatur tanggal jatuh temponya dilewati dari auto-isolir dan reminder
       continue;
     }
-    const effectiveDueDate = getEffectiveDueDate(currentYear, currentMonth, configuredDueDate);
+
+    // Periksa apakah ada tanggal spesifik lengkap di comment pelanggan (misal: 09-10-2026)
+    let fullDueYear = null;
+    let fullDueMonth = null;
+    if (c.comment && String(c.comment).trim() !== '') {
+      const fullDateMatch = String(c.comment).trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (fullDateMatch) {
+        fullDueMonth = parseInt(fullDateMatch[2], 10);
+        fullDueYear = parseInt(fullDateMatch[3], 10);
+      }
+    }
+
+    const calcYear = fullDueYear || currentYear;
+    const calcMonth = fullDueMonth || currentMonth;
+    const effectiveDueDate = getEffectiveDueDate(calcYear, calcMonth, configuredDueDate);
 
     // Tanggal jatuh tempo & deadline toleransi isolir
-    const dueDateTime = new Date(currentYear, currentMonth - 1, effectiveDueDate);
+    const dueDateTime = new Date(calcYear, calcMonth - 1, effectiveDueDate);
     const deadlineTime = new Date(dueDateTime);
     deadlineTime.setDate(deadlineTime.getDate() + toleranceDays);
 

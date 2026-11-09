@@ -248,16 +248,25 @@ async function syncFromMikrotik() {
       // Tgl Jatuh Tempo diambil dari Comment di MikroTik (format: DD-MM-YYYY atau angka tanggal)
       // Jika comment di MikroTik kosong, dueDate bernilai null (Belum Diatur)
       let dueDate = null;
+      let fullDueYear = null;
+      let fullDueMonth = null;
       if (comment && String(comment).trim() !== '') {
-        const dateMatch = comment.match(/^(\d{1,2})[-/]/);
-        if (dateMatch) {
-          dueDate = parseInt(dateMatch[1], 10);
+        const fullDateMatch = String(comment).trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+        if (fullDateMatch) {
+          dueDate = parseInt(fullDateMatch[1], 10);
+          fullDueMonth = parseInt(fullDateMatch[2], 10);
+          fullDueYear = parseInt(fullDateMatch[3], 10);
         } else {
-          const numMatch = comment.match(/\b(\d{1,2})\b/);
-          if (numMatch) {
-            const parsed = parseInt(numMatch[1], 10);
-            if (parsed >= 1 && parsed <= 31) {
-              dueDate = parsed;
+          const dateMatch = comment.match(/^(\d{1,2})[-/]/);
+          if (dateMatch) {
+            dueDate = parseInt(dateMatch[1], 10);
+          } else {
+            const numMatch = comment.match(/\b(\d{1,2})\b/);
+            if (numMatch) {
+              const parsed = parseInt(numMatch[1], 10);
+              if (parsed >= 1 && parsed <= 31) {
+                dueDate = parsed;
+              }
             }
           }
         }
@@ -273,18 +282,18 @@ async function syncFromMikrotik() {
       if (!customer) {
         // Buat data pelanggan baru dari MikroTik (Pelanggan = Name di MikroTik, Phone = Caller ID)
         const info = db.prepare(`
-          INSERT INTO customers (name, phone, pppoe_username, pppoe_password, plan_id, due_date, status)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(username, phone, username, password, planId, dueDate, status);
+          INSERT INTO customers (name, phone, pppoe_username, pppoe_password, plan_id, due_date, status, comment)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(username, phone, username, password, planId, dueDate, status, comment);
         customer = { id: info.lastInsertRowid, phone: phone };
       } else {
         // Update data jika sudah ada (Pertahankan nomor WA jika sudah ada di SQLite)
         const finalPhone = (customer.phone && customer.phone !== '-') ? customer.phone : phone;
         db.prepare(`
           UPDATE customers 
-          SET name = ?, phone = ?, pppoe_password = ?, plan_id = ?, due_date = ?, status = ?
+          SET name = ?, phone = ?, pppoe_password = ?, plan_id = ?, due_date = ?, status = ?, comment = ?
           WHERE id = ?
-        `).run(username, finalPhone, password, planId, dueDate, status, customer.id);
+        `).run(username, finalPhone, password, planId, dueDate, status, comment, customer.id);
       }
 
       // Pastikan ada tagihan untuk bulan berjalan (Dinamis: Tahun-Bulan saat ini)
@@ -298,9 +307,11 @@ async function syncFromMikrotik() {
       let isCustomerOverdue = false;
       if (dueDate) {
         const toleranceDays = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'tolerance_days'").get()?.value || '1', 10);
-        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+        const calcYear = fullDueYear || currentYear;
+        const calcMonth = fullDueMonth || currentMonth;
+        const daysInMonth = new Date(calcYear, calcMonth, 0).getDate();
         const effectiveDueDate = Math.min(dueDate, daysInMonth);
-        const dueDateTime = new Date(currentYear, currentMonth - 1, effectiveDueDate);
+        const dueDateTime = new Date(calcYear, calcMonth - 1, effectiveDueDate);
         const deadlineTime = new Date(dueDateTime);
         deadlineTime.setDate(deadlineTime.getDate() + toleranceDays);
         const todayTime = new Date(currentYear, currentMonth - 1, currentDay);
