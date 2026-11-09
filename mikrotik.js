@@ -229,7 +229,16 @@ async function syncFromMikrotik() {
           rawCaller = '0' + rawCaller;
         }
       }
-      const phone = rawCaller || '-'; // No WA terhubung langsung ke Caller ID
+      let phone = rawCaller || '-'; // No WA terhubung
+      if (rawCaller && !rawCaller.includes(':') && rawCaller.length >= 8) {
+        // Jika caller-id di MikroTik terisi nomor HP, bersihkan di MikroTik agar tidak memblokir MAC Address PPPoE
+        try {
+          const secretId = rawS['.id'] || s.id;
+          if (secretId) {
+            await api.rosApi.write(['/ppp/secret/set', '=.id=' + secretId, '=caller-id=']);
+          }
+        } catch (e) {}
+      }
       const isDisabled = s.disabled === true || s.disabled === 'true';
       const status = isDisabled ? 'isolated' : 'active';
       const activeSession = activeUsernames.get(username);
@@ -269,12 +278,13 @@ async function syncFromMikrotik() {
         `).run(username, phone, username, password, planId, dueDate, status);
         customer = { id: info.lastInsertRowid, phone: phone };
       } else {
-        // Update data jika sudah ada (Name, Password, Phone/Caller-ID, Due Date dari Comment MikroTik)
+        // Update data jika sudah ada (Pertahankan nomor WA jika sudah ada di SQLite)
+        const finalPhone = (customer.phone && customer.phone !== '-') ? customer.phone : phone;
         db.prepare(`
           UPDATE customers 
           SET name = ?, phone = ?, pppoe_password = ?, plan_id = ?, due_date = ?, status = ?
           WHERE id = ?
-        `).run(username, phone, password, planId, dueDate, status, customer.id);
+        `).run(username, finalPhone, password, planId, dueDate, status, customer.id);
       }
 
       // Pastikan ada tagihan untuk bulan berjalan (2026-11)
@@ -378,7 +388,7 @@ async function addCustomerToMikrotik({ name, password, profile, phone, dueDate, 
       profile: profile || 'default',
       service: 'pppoe',
       comment: formattedComment,
-      'caller-id': phone ? String(phone).trim() : '',
+      'caller-id': '', // Wajib kosong agar tidak memblokir MAC Address PPPoE klien
       disabled: disabledFlag
     };
 
@@ -509,6 +519,7 @@ async function getMikrotikLiveStatus() {
 }
 
 // Update Nomor WA Pelanggan (Caller ID di MikroTik)
+// Update No HP Pelanggan di SQLite (dan bersihkan caller-id di MikroTik jika sebelumnya terisi no HP)
 async function updateCustomerPhoneInMikrotik(username, phone) {
   let apiInstance = null;
   try {
@@ -519,8 +530,9 @@ async function updateCustomerPhoneInMikrotik(username, phone) {
     const secrets = await secretMenu.get();
     const target = secrets.find(s => s.name === username);
     if (target) {
-      // Gunakan rosApi.write langsung dengan format standard RouterOS v6
-      await api.rosApi.write(['/ppp/secret/set', '=.id=' + target.id, '=caller-id=' + String(phone).trim()]);
+      // Pastikan caller-id di MikroTik bersih / kosong agar tidak memblokir MAC Address PPPoE
+      const targetId = target['.id'] || target.id;
+      await api.rosApi.write(['/ppp/secret/set', '=.id=' + targetId, '=caller-id=']);
     }
 
     // Update SQLite
@@ -619,7 +631,8 @@ async function updateCustomerInMikrotik(username, { dueDate, phone, password, pr
     }
 
     if (phone !== undefined) {
-      rosCmd.push('=caller-id=' + String(phone || '').trim());
+      // Pastikan caller-id di MikroTik tetap kosong agar autentikasi MAC PPPoE tidak tertolak
+      rosCmd.push('=caller-id=');
     }
 
     if (password) {
