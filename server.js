@@ -1471,11 +1471,21 @@ app.post('/api/admin/customers/:id/toggle-bill-status', requireAdminAuth, requir
         `).run(id, curPeriod, amount);
       }
 
-      logActivity('PAYMENT', `Admin secara manual mengubah status tagihan menjadi BELUM BAYAR (${curPeriod})`, cust.pppoe_username);
+      // Otomatis ubah status pelanggan jadi 'isolated' dan isolir di MikroTik (Disable + Kick Sesi Aktif)
+      db.prepare("UPDATE customers SET status = 'isolated' WHERE id = ?").run(id);
+      let mikrotikIsolated = false;
+      try {
+        await setMikrotikSecretStatus(cust.pppoe_username, false);
+        mikrotikIsolated = true;
+      } catch (e) {
+        console.error('[Manual Payment] Gagal isolir MikroTik saat ubah ke Belum Bayar:', e.message);
+      }
+
+      logActivity('PAYMENT', `Admin secara manual mengubah status tagihan menjadi BELUM BAYAR (${curPeriod}) & mengisolir layanan`, cust.pppoe_username);
 
       return res.json({
         success: true,
-        message: `Status tagihan ${cust.name} berhasil diubah menjadi BELUM BAYAR.`
+        message: `Status tagihan ${cust.name} berhasil diubah menjadi BELUM BAYAR.${mikrotikIsolated ? ' Layanan MikroTik telah diisolir & koneksi aktif diputus.' : ''}`
       });
     }
   } catch (err) {
