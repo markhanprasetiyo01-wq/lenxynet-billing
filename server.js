@@ -13,7 +13,8 @@ const {
   getMikrotikLiveStatus,
   getMikrotikInterfaces,
   getMikrotikTraffic,
-  getMikrotikActiveSessions
+  getMikrotikActiveSessions,
+  parsePlanPrice
 } = require('./mikrotik');
 const { runAutoIsolirCheck, startCronJobs } = require('./cron');
 const { initWhatsApp, getWAStatus, logoutWhatsApp, sendPaymentSuccessNotice, sendReminderHMinus3, sendReminderHPlus1, sendPromoNotice, sendWhatsAppMessage, sendNotificationToAdmin } = require('./wa');
@@ -25,10 +26,43 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Security Headers Middleware
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  next();
+});
+
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ limit: '20mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'public', 'uploads')));
+
+// Helper Validasi Format & Integritas File Gambar (Magic Bytes & Whitelist Extension)
+function validateImageBuffer(buffer, claimedExt) {
+  if (!buffer || !Buffer.isBuffer(buffer)) return { valid: false, error: 'Data gambar tidak valid.' };
+  if (buffer.length < 16) return { valid: false, error: 'Ukuran file gambar terlalu kecil.' };
+  if (buffer.length > 10 * 1024 * 1024) return { valid: false, error: 'Ukuran file maksimal 10MB.' };
+
+  const normExt = (claimedExt || '').toLowerCase().replace(/^\./, '');
+  const allowed = ['jpg', 'jpeg', 'png', 'webp'];
+  if (!allowed.includes(normExt)) {
+    return { valid: false, error: 'Format file tidak diizinkan! Hanya menerima gambar JPG, PNG, atau WEBP.' };
+  }
+
+  // Validasi Magic Bytes: Pastikan file asli gambar, bukan skrip eksekutabel/SVG/HTML yang disamarkan
+  const isJpeg = buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+  const isPng = buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47;
+  const isWebp = buffer.length > 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+
+  if (isJpeg) return { valid: true, ext: 'jpg' };
+  if (isPng) return { valid: true, ext: 'png' };
+  if (isWebp) return { valid: true, ext: 'webp' };
+
+  return { valid: false, error: 'Integritas file ditolak: File bukan gambar asli (Magic Bytes header tidak sesuai).' };
+}
 
 // Helper Standardisasi Format Nomor WhatsApp Lokal (08xxxxxxxxx)
 function normalizePhoneNumber(phone) {
@@ -1109,34 +1143,8 @@ app.get('/api/admin/stats', async (req, res) => {
 
 // Helper ekstrak harga paket dari comment MikroTik atau pola nama profile
 function extractPriceFromProfile(p) {
-  // 1. Prioritas Utama: Baca Comment dari MikroTik (misal: 150000, 150.000, 150k, 150rb)
-  if (p && p.comment !== undefined && p.comment !== null) {
-    const strComment = String(p.comment).trim();
-    if (strComment !== '') {
-      // Cek pola angka + 'k' atau 'rb' (misal: 150k, 150rb, 59k)
-      const kMatch = strComment.match(/^(\d+)\s*(k|rb)$/i);
-      if (kMatch) {
-        return parseInt(kMatch[1], 10) * 1000;
-      }
-      // Ambil hanya digit angka (misal "150000", "150.000", "Rp 150.000")
-      const digits = strComment.replace(/\D/g, '');
-      if (digits) {
-        const val = parseInt(digits, 10);
-        if (!isNaN(val) && val > 0) return val;
-      }
-    }
-  }
-
-  // 2. Fallback: Ekstrak dari Nama Profile jika comment kosong (misal "150rb" atau "150k")
-  if (p && p.name) {
-    const nameMatch = String(p.name).match(/(\d+)\s*(rb|k)/i);
-    if (nameMatch) {
-      return parseInt(nameMatch[1], 10) * 1000;
-    }
-  }
-
-  // 3. Nilai default jika comment dan nama tidak mengandung angka harga
-  return 100000;
+  if (!p) return 100000;
+  return parsePlanPrice(p.comment, p.name);
 }
 
 // Get Available Profiles/Plans (Real-Time from MikroTik)
@@ -1158,7 +1166,7 @@ app.get('/api/admin/plans', async (req, res) => {
     // Sinkronkan ke tabel plans (otomatis update harga dari comment MikroTik)
     validProfiles.forEach(p => {
       const speed = p['rate-limit'] || p.rateLimit || 'Unlimited';
-      const price = extractPriceFromProfile(p);
+      const price = parsePlanPrice(p.comment, p.name);
       const existing = db.prepare('SELECT id FROM plans WHERE profile = ?').get(p.name);
       if (existing) {
         db.prepare('UPDATE plans SET price = ?, speed = ?, name = ? WHERE id = ?').run(price, speed, p.name, existing.id);
@@ -1430,6 +1438,10 @@ app.get('/api/admin/customers', async (req, res) => {
         c.bill_status = 'unpaid';
         c.bill_amount = amount;
         c.bill_period = currentPeriod;
+      } else if (c.bill_status === 'unpaid' && c.plan_price && c.bill_amount !== c.plan_price) {
+        // Otomatis sinkronkan harga tagihan belum bayar jika ada penyesuaian harga profile MikroTik
+        db.prepare('UPDATE bills SET amount = ? WHERE id = ?').run(c.plan_price, c.bill_id);
+        c.bill_amount = c.plan_price;
       }
     });
 
@@ -1916,90 +1928,13 @@ app.get('/api/user/portal', requireUserOrAdminAuth, async (req, res) => {
   }
 });
 
-// Mock Pay via QRIS - SAAT LUNAS OTOMATIS ENABLE DI MIKROTIK (Terlindungi Sesi & Setting)
-app.post('/api/user/pay-qris', requireUserOrAdminAuth, async (req, res) => {
-  const mockEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value === 'true';
-  if (!mockEnabled) {
-    return res.status(403).json({ error: 'Simulasi pelunasan QRIS mandiri dinonaktifkan oleh administrator.' });
-  }
-
-  const { bill_id, durationMonths } = req.body;
-  if (!bill_id) return res.status(400).json({ error: 'Bill ID required' });
-
-  // Validasi kepemilikan tagihan: user hanya bisa melunasi tagihannya sendiri
-  let bill = null;
-  if (req.userSession) {
-    bill = db.prepare('SELECT customer_id, period, amount FROM bills WHERE id = ? AND customer_id = ?').get(bill_id, req.userSession.customer_id);
-  } else if (req.adminSession) {
-    bill = db.prepare('SELECT customer_id, period, amount FROM bills WHERE id = ?').get(bill_id);
-  }
-
-  if (!bill) {
-    return res.status(403).json({ error: 'Tagihan tidak ditemukan atau Anda tidak memiliki akses ke tagihan ini.' });
-  }
-
-  const duration = parseInt(durationMonths, 10) || 1;
-  const cust = db.prepare('SELECT * FROM customers WHERE id = ?').get(bill.customer_id);
-  const singleMonthPrice = bill.amount;
-  const totalAmount = singleMonthPrice * duration;
-
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  // Loop lunasi atau buat periode ke depan
-  const periodsPaid = [];
-  for (let i = 0; i < duration; i++) {
-    const targetDate = new Date(currentYear, currentMonth + i, 1);
-    const pYear = targetDate.getFullYear();
-    const pMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
-    const periodKey = `${pYear}-${pMonth}`;
-    periodsPaid.push(periodKey);
-
-    const existingBill = db.prepare('SELECT id FROM bills WHERE customer_id = ? AND period = ?').get(bill.customer_id, periodKey);
-    if (existingBill) {
-      db.prepare("UPDATE bills SET status = 'paid', amount = ?, paid_at = datetime('now', 'localtime'), payment_method = 'QRIS' WHERE id = ?")
-        .run(singleMonthPrice, existingBill.id);
-    } else {
-      db.prepare("INSERT INTO bills (customer_id, period, amount, status, paid_at, payment_method) VALUES (?, ?, ?, 'paid', datetime('now', 'localtime'), 'QRIS')")
-        .run(bill.customer_id, periodKey, singleMonthPrice);
-    }
-  }
-  
-  // Auto unisolir customer jika sebelumnya terisolir
-  db.prepare("UPDATE customers SET status = 'active' WHERE id = ?").run(bill.customer_id);
-  
-  logActivity('PAYMENT', `Pembayaran Mandiri QRIS sebesar Rp ${totalAmount.toLocaleString('id-ID')} (${duration} bln)`, cust ? cust.pppoe_username : 'USER');
-  
-  // Aktifkan kembali di MikroTik
-  if (cust) {
-    try {
-      await setMikrotikSecretStatus(cust.pppoe_username, true);
-    } catch (e) {
-      console.error('Failed to enable secret on MikroTik upon payment:', e.message);
-    }
-
-    // Kirim Notifikasi WhatsApp Terima Kasih & Bukti Pembayaran Lunas
-    if (cust.phone && cust.phone !== '-') {
-      try {
-        const periodLabel = periodsPaid.length > 1 
-          ? `${periodsPaid[0]} s/d ${periodsPaid[periodsPaid.length - 1]}`
-          : periodsPaid[0];
-
-        await sendPaymentSuccessNotice(cust, { 
-          period: periodLabel, 
-          amount: totalAmount, 
-          durationMonths: duration,
-          payment_method: 'QRIS Instan' 
-        });
-        console.log(`[WhatsApp] Bukti bayar terkirim ke ${cust.phone}`);
-      } catch (e) {
-        console.warn('[WhatsApp] Gagal kirim bukti bayar:', e.message);
-      }
-    }
-  }
-
-  res.json({ success: true, message: 'Pembayaran QRIS Berhasil! Akun MikroTik otomatis aktif kembali.' });
+// Keamanan Ketat: Endpoint simulasi QRIS mandiri dinonaktifkan secara permanen
+// Seluruh pembayaran QRIS wajib mengunggah bukti transfer asli dan diverifikasi oleh Admin
+app.post('/api/user/pay-qris', (req, res) => {
+  return res.status(403).json({ 
+    success: false, 
+    error: 'Akses Ditolak: Fitur pelunasan QRIS otomatis tanpa verifikasi telah dinonaktifkan permanen demi keamanan. Silakan transfer ke QRIS Toko dan unggah bukti transfer agar diverifikasi admin.' 
+  });
 });
 
 // === ENDPOINTS SISTEM QRIS STATIS TOKO & VERIFIKASI BUKTI TRANSFER ===
@@ -2045,10 +1980,20 @@ app.post('/api/admin/settings/qris', requireAdminAuth, (req, res) => {
     if (qris_image_data && typeof qris_image_data === 'string' && qris_image_data.startsWith('data:image/')) {
       const matches = qris_image_data.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
       if (matches) {
-        const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+        const rawExt = matches[1];
         const buffer = Buffer.from(matches[2], 'base64');
+        const validation = validateImageBuffer(buffer, rawExt);
+        if (!validation.valid) {
+          return res.status(400).json({ success: false, error: validation.error });
+        }
+        const ext = validation.ext;
+        const qrisDir = path.join(__dirname, 'public', 'uploads', 'qris');
+        if (!fs.existsSync(qrisDir)) fs.mkdirSync(qrisDir, { recursive: true });
         const filename = `qris_custom_${Date.now()}.${ext}`;
-        const filePath = path.join(__dirname, 'public', 'uploads', 'qris', filename);
+        const filePath = path.join(qrisDir, filename);
+        if (!path.resolve(filePath).startsWith(path.resolve(qrisDir))) {
+          return res.status(400).json({ success: false, error: 'Path traversal terdeteksi!' });
+        }
         fs.writeFileSync(filePath, buffer);
 
         const publicUrl = `/uploads/qris/${filename}`;
@@ -2147,6 +2092,9 @@ app.post('/api/admin/backup/mikrotik', requireAdminAuth, async (req, res) => {
   }
 });
 
+// Rate-limiting map untuk mencegah spam upload bukti transfer
+const uploadProofRateLimitMap = new Map();
+
 // 3. Pelanggan Mengunggah Bukti Pembayaran QRIS
 app.post('/api/user/upload-proof', requireUserOrAdminAuth, async (req, res) => {
   try {
@@ -2170,26 +2118,46 @@ app.post('/api/user/upload-proof', requireUserOrAdminAuth, async (req, res) => {
       return res.status(403).json({ error: 'Tagihan tidak ditemukan atau Anda tidak memiliki akses.' });
     }
 
-    // Decode & Simpan gambar ke public/uploads/proofs/
-    const matches = proof_image.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
-    if (!matches) {
-      return res.status(400).json({ error: 'Format gambar tidak valid!' });
+    // Tolak jika tagihan sudah berstatus lunas
+    if (bill.status === 'paid') {
+      return res.status(400).json({ error: 'Tagihan ini sudah berstatus LUNAS. Tidak perlu mengunggah bukti lagi.' });
     }
-    const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+
+    // Rate Limiting Upload: Maksimal 1x per 10 detik per pengguna
+    const clientId = req.userSession ? `user_${req.userSession.customer_id}` : `admin_${req.adminSession.id}`;
+    const nowTs = Date.now();
+    const lastUpload = uploadProofRateLimitMap.get(clientId);
+    if (lastUpload && (nowTs - lastUpload) < 10000) {
+      const waitSec = Math.ceil((10000 - (nowTs - lastUpload)) / 1000);
+      return res.status(429).json({ error: `Terlalu cepat! Harap tunggu ${waitSec} detik sebelum mengunggah kembali.` });
+    }
+    uploadProofRateLimitMap.set(clientId, nowTs);
+
+    // Decode & Validasi Ketat Integritas Gambar (Magic Bytes & MIME whitelist)
+    const matches = proof_image.match(/^data:image\/([a-zA-Z0-9_\-+]+);base64,(.+)$/);
+    if (!matches) {
+      return res.status(400).json({ error: 'Format data gambar bukti transfer tidak valid!' });
+    }
+    const rawExt = matches[1];
     const buffer = Buffer.from(matches[2], 'base64');
 
-    if (buffer.length > 10 * 1024 * 1024) {
-      return res.status(400).json({ error: 'Ukuran foto maksimal 10MB!' });
+    const validation = validateImageBuffer(buffer, rawExt);
+    if (!validation.valid) {
+      return res.status(400).json({ error: validation.error });
     }
+    const ext = validation.ext;
 
     const proofsDir = path.join(__dirname, 'public', 'uploads', 'proofs');
     if (!fs.existsSync(proofsDir)) fs.mkdirSync(proofsDir, { recursive: true });
 
     // Hapus bukti lama untuk bill ini jika ada agar disk tidak boros
     if (bill.proof_image && bill.proof_image.startsWith('/uploads/proofs/')) {
-      const oldFilePath = path.join(__dirname, 'public', bill.proof_image);
+      const oldFilename = path.basename(bill.proof_image);
+      const oldFilePath = path.join(proofsDir, oldFilename);
       try {
-        if (fs.existsSync(oldFilePath)) fs.unlinkSync(oldFilePath);
+        if (fs.existsSync(oldFilePath) && path.resolve(oldFilePath).startsWith(path.resolve(proofsDir))) {
+          fs.unlinkSync(oldFilePath);
+        }
       } catch (errDel) {}
     }
 
@@ -2215,6 +2183,11 @@ app.post('/api/user/upload-proof', requireUserOrAdminAuth, async (req, res) => {
 
     const filename = `Bukti_${cleanPeriod}_${cleanName}_${cleanPhone}_${timeStr}.${ext}`;
     const filePath = path.join(proofsDir, filename);
+
+    // Pastikan bebas path traversal
+    if (!path.resolve(filePath).startsWith(path.resolve(proofsDir))) {
+      return res.status(400).json({ error: 'Target path tidak valid.' });
+    }
 
     try {
       fs.writeFileSync(filePath, buffer);
@@ -2332,8 +2305,10 @@ app.post('/api/admin/payments/:id/approve', requireAdminAuth, requireMikrotikCon
 
     // Auto-Backup Bukti Transfer ke Telegram & Hapus dari Local Storage STB
     if (bill.proof_image && bill.proof_image.startsWith('/uploads/proofs/')) {
-      const localFilePath = path.join(__dirname, 'public', bill.proof_image.replace(/^\/+/, ''));
-      if (fs.existsSync(localFilePath)) {
+      const proofsDir = path.join(__dirname, 'public', 'uploads', 'proofs');
+      const safeFilename = path.basename(bill.proof_image);
+      const localFilePath = path.join(proofsDir, safeFilename);
+      if (fs.existsSync(localFilePath) && path.resolve(localFilePath).startsWith(path.resolve(proofsDir))) {
         try {
           const caption = `🟢 <b>[PEMBAYARAN QRIS DISETUJUI / LUNAS]</b>\n\n` +
             `• <b>Pelanggan:</b> ${bill.customer_name} (<code>${bill.pppoe_username}</code>)\n` +
@@ -2402,8 +2377,10 @@ app.post('/api/admin/payments/:id/reject', requireAdminAuth, requireMikrotikConn
 
     // Auto-Backup Bukti Transfer ke Telegram & Hapus dari Local Storage STB
     if (bill.proof_image && bill.proof_image.startsWith('/uploads/proofs/')) {
-      const localFilePath = path.join(__dirname, 'public', bill.proof_image.replace(/^\/+/, ''));
-      if (fs.existsSync(localFilePath)) {
+      const proofsDir = path.join(__dirname, 'public', 'uploads', 'proofs');
+      const safeFilename = path.basename(bill.proof_image);
+      const localFilePath = path.join(proofsDir, safeFilename);
+      if (fs.existsSync(localFilePath) && path.resolve(localFilePath).startsWith(path.resolve(proofsDir))) {
         try {
           const caption = `🔴 <b>[PEMBAYARAN QRIS DITOLAK]</b>\n\n` +
             `• <b>Pelanggan:</b> ${bill.customer_name} (<code>${bill.pppoe_username}</code>)\n` +

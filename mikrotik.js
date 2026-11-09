@@ -10,9 +10,11 @@ function deleteCustomerLocalData(customerId, username = '') {
     const billsWithProof = db.prepare('SELECT proof_image FROM bills WHERE customer_id = ? AND proof_image IS NOT NULL').all(customerId);
     for (const b of billsWithProof) {
       if (b.proof_image && b.proof_image.startsWith('/uploads/proofs/')) {
-        const filePath = path.join(__dirname, 'public', b.proof_image);
+        const proofsDir = path.join(__dirname, 'public', 'uploads', 'proofs');
+        const safeFilename = path.basename(b.proof_image);
+        const filePath = path.join(proofsDir, safeFilename);
         try {
-          if (fs.existsSync(filePath)) {
+          if (fs.existsSync(filePath) && path.resolve(filePath).startsWith(path.resolve(proofsDir))) {
             fs.unlinkSync(filePath);
             console.log(`[Storage Cleanup] File bukti transfer berhasil dihapus: ${filePath}`);
           }
@@ -49,6 +51,60 @@ function getRouterConfig() {
   const port = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'router_port'").get()?.value || '8728', 10);
   const connected = db.prepare("SELECT value FROM settings WHERE key = 'router_connected'").get()?.value;
   return { host: ip, user: user, password: pass, port: port, timeout: 10, isConfigured: Boolean(ip && user), isConnected: connected === 'true' };
+}
+
+// Helper Ekstraksi & Deteksi Harga Paket dari Comment / Nama Profile MikroTik
+function extractPrice(str) {
+  if (!str) return null;
+  const clean = String(str).replace(/rp\.?/gi, '').trim();
+
+  // Pola A: Ada akhiran 'k', 'rb', atau 'ribu' (contoh: 150k, 150rb, 150 ribu, 59k, 80k, 120k)
+  const matchK = clean.match(/(\d+(?:[.,]\d+)?)\s*(?:k|rb|ribu)\b/i);
+  if (matchK) {
+    const val = parseFloat(matchK[1].replace(',', '.'));
+    if (!isNaN(val) && val > 0) return Math.round(val * 1000);
+  }
+
+  // Pola B: Format angka ribuan dengan titik/koma (contoh: 150.000, 150,000, 1.000.000)
+  const matchThousands = clean.match(/\b(\d{1,3}(?:[.,]\d{3})+)\b/);
+  if (matchThousands) {
+    const num = parseInt(matchThousands[1].replace(/[.,]/g, ''), 10);
+    if (!isNaN(num) && num >= 10000) return num;
+  }
+
+  // Pola C: Angka utuh >= 10000 (contoh: 100000, 150000, 200000)
+  const matchFullNum = clean.match(/\b(\d{5,})\b/);
+  if (matchFullNum) {
+    const num = parseInt(matchFullNum[1], 10);
+    if (!isNaN(num)) return num;
+  }
+
+  // Pola D: Singkatan ratusan/puluhan ribu di comment MikroTik (contoh admin isi comment: 100, 150, 200, 50, 80, 250)
+  const matchShort = clean.match(/\b(\d{2,4})\b/);
+  if (matchShort) {
+    const num = parseInt(matchShort[1], 10);
+    if (num >= 20 && num <= 999) return num * 1000;
+    if (num >= 1000 && num <= 2000) return num * 1000;
+  }
+
+  return null;
+}
+
+function parsePlanPrice(comment, name) {
+  // 1. Prioritaskan comment di MikroTik terlebih dahulu
+  if (comment !== undefined && comment !== null) {
+    const p = extractPrice(String(comment));
+    if (p !== null) return p;
+  }
+
+  // 2. Jika comment kosong, ekstrak dari nama profile (misal: "PAKET 150K", "150rb", dll.)
+  if (name !== undefined && name !== null) {
+    const p = extractPrice(String(name));
+    if (p !== null) return p;
+  }
+
+  // 3. Fallback default
+  return 100000;
 }
 
 function formatRosError(err, host = '', port = 8728) {
@@ -165,15 +221,8 @@ async function syncFromMikrotik() {
       if (p.name === 'default' || p.name === 'default-encryption') continue;
       
       const speed = p.rateLimit || 'Unlimited';
-      // Coba ekstrak harga jika ada pola angka di nama profile (misal "Paket 150rb/10Mbps")
-      let price = 100000;
-      const matchPrice = p.name.match(/(\d+)rb/i);
-      if (matchPrice) {
-        price = parseInt(matchPrice[1]) * 1000;
-      } else {
-        const matchNum = p.name.match(/(\d{5,})/);
-        if (matchNum) price = parseInt(matchNum[1]);
-      }
+      // Deteksi harga dinamis dari Comment MikroTik (misal: "100", "150", "200", "150k", "150.000") atau nama profile
+      const price = parsePlanPrice(p.comment, p.name);
 
       // Cek apakah sudah ada plan dengan nama ini di SQLite
       const existingPlan = db.prepare('SELECT id FROM plans WHERE name = ? OR profile = ?').get(p.name, p.name);
@@ -320,15 +369,19 @@ async function syncFromMikrotik() {
         isCustomerOverdue = Boolean(unpaidOldBill) || (todayTime.getTime() > deadlineTime.getTime());
       }
 
-      let bill = db.prepare('SELECT id, status FROM bills WHERE customer_id = ? AND period = ?').get(customer.id, currentPeriod);
+      let bill = db.prepare('SELECT id, status, amount FROM bills WHERE customer_id = ? AND period = ?').get(customer.id, currentPeriod);
       if (!bill) {
-        // Tagihan baru dibuat sebagai 'unpaid' jika sudah lewat jatuh tempo atau MikroTik disabled
-        const billStatus = (isDisabled || isCustomerOverdue) ? 'unpaid' : 'unpaid';
+        // Tagihan baru dibuat sebagai 'unpaid' jika sudah lewat jatuh tempo atau MikroTik disabled, selain itu 'paid'
+        const billStatus = (isDisabled || isCustomerOverdue) ? 'unpaid' : 'paid';
         const infoBill = db.prepare(`
           INSERT INTO bills (customer_id, period, amount, status)
           VALUES (?, ?, ?, ?)
         `).run(customer.id, currentPeriod, planPrice, billStatus);
-        bill = { id: infoBill.lastInsertRowid, status: billStatus };
+        bill = { id: infoBill.lastInsertRowid, status: billStatus, amount: planPrice };
+      } else if (bill.status === 'unpaid' && bill.amount !== planPrice) {
+        // Sinkronkan nominal tagihan berjalan yang belum dibayar dengan harga paket terbaru
+        db.prepare('UPDATE bills SET amount = ? WHERE id = ?').run(planPrice, bill.id);
+        bill.amount = planPrice;
       }
 
       // KONSISTENSI DATA DATABASE VS MIKROTIK:
@@ -823,5 +876,6 @@ module.exports = {
   getMikrotikInterfaces,
   getMikrotikTraffic,
   getMikrotikActiveSessions,
-  getRouterConfig
+  getRouterConfig,
+  parsePlanPrice
 };
