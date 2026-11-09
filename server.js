@@ -1222,7 +1222,7 @@ app.post('/api/admin/customers', async (req, res) => {
       phone: phone ? phone.trim() : '-',
       dueDate: parseInt(dueDate) || 10,
       comment,
-      initialPayment: initialPayment || 'unpaid'
+      initialPayment: initialPayment || 'paid'
     });
     res.json({ success: true, message: `Pelanggan '${cleanName}' berhasil ditambahkan ke MikroTik & Database!` });
   } catch (err) {

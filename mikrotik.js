@@ -427,9 +427,9 @@ async function addCustomerToMikrotik({ name, password, profile, phone, dueDate, 
       formattedComment = `${padDay}-${month}-${year}`;
     }
 
-    const isPaid = initialPayment === 'paid';
+    const isPaid = initialPayment !== 'unpaid';
     const status = isPaid ? 'active' : 'isolated';
-    const disabledFlag = isPaid ? 'no' : 'yes'; // Jika belum bayar, langsung disable di MikroTik
+    const disabledFlag = isPaid ? 'no' : 'yes'; // Default: Sudah bayar (Aktif / disabled='no')
 
     // 1. Buat Secret baru di MikroTik
     const secretMenu = client.menu('/ppp secret');

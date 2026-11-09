@@ -1715,18 +1715,17 @@
             <label class="block font-semibold text-slate-300 mb-1">Status Pembayaran Pertama</label>
             <div class="grid grid-cols-2 gap-2">
               <label
-                class="flex items-center space-x-2 p-2.5 rounded-xl border border-brand-border bg-slate-900 cursor-pointer hover:border-slate-600 transition">
-                <input type="radio" name="add-initial-status" value="unpaid" checked class="text-rose-500 focus:ring-0">
-                <span class="text-slate-300 font-medium">Belum Bayar (Isolir)</span>
+                class="flex items-center space-x-2 p-2.5 rounded-xl border border-emerald-500/40 bg-emerald-950/20 cursor-pointer hover:border-emerald-500 transition">
+                <input type="radio" name="add-initial-status" value="paid" checked class="text-emerald-500 focus:ring-0">
+                <span class="text-emerald-300 font-semibold">Sudah Lunas (Aktif)</span>
               </label>
               <label
                 class="flex items-center space-x-2 p-2.5 rounded-xl border border-brand-border bg-slate-900 cursor-pointer hover:border-slate-600 transition">
-                <input type="radio" name="add-initial-status" value="paid" class="text-emerald-500 focus:ring-0">
-                <span class="text-slate-300 font-medium">Sudah Lunas (Aktif)</span>
+                <input type="radio" name="add-initial-status" value="unpaid" class="text-rose-500 focus:ring-0">
+                <span class="text-slate-300 font-medium">Belum Bayar (Isolir)</span>
               </label>
             </div>
-            <p class="text-[10px] text-slate-500 mt-1">Jika 'Belum Bayar', akun di MikroTik langsung dinonaktifkan
-              sampai pelanggan bayar</p>
+            <p class="text-[10px] text-slate-400 mt-1">Default <strong>Sudah Lunas</strong>: Akun langsung aktif di MikroTik dan tagihan bulan pertama lunas.</p>
           </div>
 
           <div class="pt-3 border-t border-brand-border flex items-center justify-end space-x-2">
@@ -3427,6 +3426,8 @@
       // Set default tanggal jatuh tempo adalah tanggal hari ini
       const today = new Date().getDate();
       document.getElementById('add-due').value = today;
+      const initialPaidRadio = document.querySelector('input[name="add-initial-status"][value="paid"]');
+      if (initialPaidRadio) initialPaidRadio.checked = true;
       document.getElementById('addModal').classList.remove('hidden');
     }
 
