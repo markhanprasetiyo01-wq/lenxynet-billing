@@ -9,6 +9,7 @@ database.sqlite-wal
 *.backup
 *.rsc
 temp_backups/
+backups/
 
 # WhatsApp Bot Session (Baileys Session Keys & Credentials)
 wa_session/

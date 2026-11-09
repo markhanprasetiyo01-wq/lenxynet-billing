@@ -1,299 +1,256 @@
 # 🚀 LenxyNet - MikroTik ISP & Billing Management System
 
-Sistem manajemen pelanggan ISP & penagihan billing otomatis terintegrasi dengan **Router MikroTik**, **Portal Mandiri Pelanggan QRIS**, **WhatsApp Gateway (Baileys Multi-Device)**, **Cloudflare Zero Trust Tunnel**, dan **Auto-Backup ke Telegram**.
+Sistem manajemen pelanggan ISP & penagihan billing otomatis terintegrasi dengan **Router MikroTik RouterOS**, **Portal Mandiri Pelanggan QRIS**, **WhatsApp Gateway (Baileys Multi-Device)**, **Cloudflare Zero Trust Tunnel**, dan **Auto-Backup ke Telegram**.
 
 ---
 
 ## 📑 Daftar Isi
-1. [Fitur Utama](#-fitur-utama)
-2. [Keunggulan Keamanan & Anti-Hacking](#-keunggulan-keamanan--anti-hacking)
-3. [Arsitektur & Persyaratan Sistem](#-arsitektur--persyaratan-sistem)
-4. [Panduan Instalasi di PC Windows Baru](#-panduan-instalasi-di-pc-windows-baru)
-5. [Panduan Instalasi di STB HG680P (Armbian Linux) 24 Jam Non-Stop](#-panduan-instalasi-di-stb-hg680p-armbian-linux-24-jam-non-stop)
-6. [Setup Cloudflare Zero Trust Tunnel (Domain Pribadi)](#-setup-cloudflare-zero-trust-tunnel-domain-pribadi)
-7. [Restore & Migrasi Data dari Backup Telegram](#-restore--migrasi-data-dari-backup-telegram)
-8. [Pengaturan Dashboard & Koneksi Awal](#-pengaturan-dashboard--koneksi-awal)
-9. [Jadwal Otomatis (Cron Job)](#-jadwal-otomatis-cron-job)
+1. [Fitur Utama & Pembaruan](#-fitur-utama--pembaruan)
+2. [Arsitektur Jaringan & IP Pool PPPoE (Standar 2.000++ User)](#-arsitektur-jaringan--ip-pool-pppoe-standar-2000-user)
+3. [Panduan Lengkap Setup STB Fiberhome HG680P Sebagai Server 24 Jam](#-panduan-lengkap-setup-stb-fiberhome-hg680p-sebagai-server-24-jam)
+   - [A. Persiapan Bahan & OS Armbian](#a-persiapan-bahan--os-armbian)
+   - [B. Flashing OS ke MicroSD & Konfigurasi DTB](#b-flashing-os-ke-microsd--konfigurasi-dtb)
+   - [C. Booting Awal & Login SSH STB](#c-booting-awal--login-ssh-stb)
+   - [D. Pindahkan OS ke Memori Internal eMMC (Opsional tapi Sangat Direkomendasikan)](#d-pindahkan-os-ke-memori-internal-emmc)
+   - [E. Instalasi Node.js & Dependency di Armbian Linux](#e-instalasi-nodejs--dependency-di-armbian-linux)
+   - [F. Deploy Aplikasi LenxyNet & Konfigurasi Auto-Start PM2](#f-deploy-aplikasi-lenxynet--konfigurasi-auto-start-pm2)
+   - [G. Pasang Cloudflare Tunnel ARM64 (Domain https://lenxynet.store)](#g-pasang-cloudflare-tunnel-arm64)
+4. [Panduan Instalasi di PC Windows Baru (Alternatif)](#-panduan-instalasi-di-pc-windows-baru-alternatif)
+5. [Restore & Migrasi Data dari Backup Telegram](#-restore--migrasi-data-dari-backup-telegram)
+6. [Jadwal Otomatis Cron Job & Fitur Toggle ON / OFF](#-jadwal-otomatis-cron-job--fitur-toggle-on--off)
+7. [Editor Massal 394 Pelanggan (`/editor.html`)](#-editor-massal-394-pelanggan-editorhtml)
 
 ---
 
-## ✨ Fitur Utama
+## ✨ Fitur Utama & Pembaruan
 
-- **🌐 Dashboard Admin Lengkap**:
-  - Manajemen Pelanggan PPPoE (Tambah, Edit, Hapus, Isolir / Buka Isolir instan).
-  - Monitoring Trafik & Status Router MikroTik secara real-time.
-  - Verifikasi Bukti Pembayaran QRIS dari pelanggan (Setujui / Tolak tanpa reload halaman).
-  - Manajemen Paket & Profil Kecepatan Internet.
-- **📱 Portal Mandiri Pelanggan (`/user.html`)**:
+- **🌐 Dashboard Admin Modern & Ramping**:
+  - **Navbar Responsif**: Tombol pengaturan dirampingkan ke dalam **Dropdown Pengaturan** (*Koneksi MikroTik, QRIS & WA Admin, Integrasi Telegram, Template WhatsApp, Editor Massal, dan Portal Pelanggan*) sehingga tidak penuh dan tidak meluber di layar laptop/tablet.
+  - **Paginasi Cerdas 50 Pelanggan/Halaman**: List pelanggan PPPoE dibagi rapi maksimal 50 user per halaman, berpindah halaman **secara instan (0ms), bebas reload halaman, dan anti-blink**.
+  - **100% Pembayaran Nyata**: Mode simulasi demo telah dihapus total. Sistem murni memproses konfirmasi transfer asli dengan bukti foto transfer yang diverifikasi admin.
+- **📱 Portal Mandiri Pelanggan (`https://lenxynet.store/user.html`)**:
   - Cek tagihan internet bulanan berdasarkan nomor WhatsApp atau username PPPoE.
   - Pembayaran QRIS Dinamis & upload bukti transfer.
   - Sinkronisasi real-time via WebSocket/Polling: UI otomatis berubah saat pembayaran disetujui admin.
 - **💬 WhatsApp Gateway Otomatis (Baileys Multi-Device)**:
   - Notifikasi pembayaran berhasil terkirim instan ke nomor WhatsApp pelanggan.
-  - Pengingat Jatuh Tempo H-3 dan Peringatan Isolir H+1 otomatis setiap pagi.
+  - Pengingat Jatuh Tempo H-3 dan Peringatan Isolir H+1 otomatis setiap pagi jam 08:30 WIB.
   - Notifikasi instan ke Admin saat ada pelanggan yang mengunggah bukti bayar baru.
-- **⏰ Scheduler Otomatis (Cron Job)**:
-  - **00:01 WIB**: Auto-Isolir pelanggan yang menunggak melewati batas toleransi.
-  - **03:00 WIB**: Auto-Backup Database SQLite ke Telegram & pembersihan berkas bukti transfer lama.
+- **⏰ Scheduler Otomatis (Cron Job) + Toggle Switch ON/OFF**:
+  - Dilengkapi tombol switch **Toggle Cron Job** di 3 tempat (Kartu Toleransi Dashboard, Dropdown Pengaturan, dan Drawer Mobile) untuk menjeda atau mengaktifkan otomatisasi sewaktu-waktu.
+  - **00:01 WIB**: Auto-Isolir pelanggan menunggak lewat toleransi + putus sesi aktif router seketika.
+  - **03:00 WIB**: Auto-Backup Database SQLite ke Telegram + pembersihan bukti transfer lama (> 60 hari).
   - **03:05 WIB**: Auto-Backup Full System MikroTik (`.backup` dan `.rsc` portable) ke Telegram.
   - **08:30 WIB**: Pengiriman otomatis WhatsApp Reminder tagihan pagi hari.
-- **🔒 Keamanan & Zero Waste Storage**:
-  - Validasi integritas database otomatis sebelum kirim (`PRAGMA integrity_check`).
-  - Zero-waste storage: File backup sementara di router dan server langsung dihapus setelah terkirim ke Telegram.
+- **🔒 Keamanan Zero Open Ports**:
+  - Seluruh akses publik luar dilindungi oleh **Cloudflare Zero Trust Tunnel** (`https://lenxynet.store`).
+  - Port lokal 3000 dan port API MikroTik 8728 tidak pernah dibuka ke publik internet luar.
 
 ---
 
-## 🛡️ Keunggulan Keamanan & Anti-Hacking
+## 🌐 Arsitektur Jaringan & IP Pool PPPoE (Standar 2.000++ User)
 
-Sistem ini dirancang dengan prinsip **Defense-in-Depth** (keamanan berlapis) untuk menjamin keamanan operasional ISP Anda:
-
-1. **🌐 Zero Open Ports & Proteksi Cloudflare Tunnel**:
-   - **Tanpa Port Forwarding**: Router/modem rumah Anda tidak perlu membuka port publik (Port 80, 443, dan 3000 ditutup total dari internet publik).
-   - **Penyembunyian IP Asli**: Penyerang tidak bisa melacak atau memindai (*port scanning*) alamat IP publik asli rumah/server Anda.
-   - **Perlindungan DDoS & WAF**: Seluruh akses luar disaring oleh jaringan global Cloudflare yang secara otomatis memblokir serangan brute force, bot jahat, dan serangan DDoS.
-   - **Enkripsi SSL/TLS Penuh**: Akses via domain resmi (misal `https://emailgratisan.fun`) terenkripsi HTTPS secara otomatis.
-
-2. **💉 100% Kebal Serangan SQL Injection**:
-   - Seluruh kueri ke database SQLite menggunakan **Prepared Statements / Parameterized Queries** (`db.prepare('... ?').run(...)`).
-   - Karakter input berbahaya tidak akan pernah dieksekusi sebagai perintah SQL, sehingga data pelanggan dan tagihan aman dari peretasan database.
-
-3. **🔑 Kontrol Akses & Sesi Bertingkat (RBAC)**:
-   - **Dashboard Admin**: Dilindungi middleware `requireAdminAuth` berbasis token acak berkriptografi tinggi dengan masa kedaluwarsa waktu (*session expiry guard*).
-   - **Portal Pelanggan**: Menggunakan verifikasi **OTP WhatsApp**. Pelanggan hanya bisa masuk jika menerima kode di nomor telepon yang sah.
-   - **Anti-IDOR (Insecure Direct Object Reference)**: Pelanggan hanya dapat melihat dan melunasi tagihannya sendiri (`WHERE id = ? AND customer_id = userSession.customer_id`). Pelanggan tidak bisa mengintip atau mengubah data pengguna lain.
-
-4. **🚫 Proteksi Server-Side pada Mode Simulasi Bayar Demo**:
-   - Fitur simulasi demo tidak hanya disembunyikan di tampilan antarmuka (UI), tetapi **dikunci ketat di level backend / API**.
-   - Ketika mode demo dimatikan (`mock_payment_enabled = false`), upaya penembakan endpoint `POST /api/user/pay-qris` secara langsung lewat curl, Postman, atau bot peretas akan langsung ditolak server dengan respon **`403 Forbidden`**.
-   - Pengaturan bawaan sistem terkunci secara aman ke status nonaktif (*secure-by-default*).
-
-5. **📁 Keamanan Sanitasi File Upload (Anti-Webshell / Backdoor)**:
-   - Sistem upload bukti transfer menggunakan pustaka `multer` dengan validasi ganda:
-     - **Filter Ekstensi & MIME-Type Ketat**: Hanya menerima berkas gambar asli (`.jpg`, `.jpeg`, `.png`, `.webp`). Berkas berbahaya seperti script PHP, Shell, Python, atau Executable otomatis diblokir.
-     - **Limit Ukuran**: Ukuran berkas dibatasi maksimal 5 MB untuk mencegah serangan pengurasan penyimpanan (*storage exhaustion*).
-     - **Random Hash Filename**: Nama berkas diacak ulang menggunakan kriptografi acak saat disimpan untuk mencegah serangan *Directory Traversal*.
-
-6. **🔒 Isolasi Port API MikroTik**:
-   - Port API RouterOS (`8728`) hanya dibuka untuk segmen jaringan lokal privat dan hanya dapat dihubungi oleh IP internal server Node.js.
-   - Port manajemen router tidak pernah diekspos ke publik internet luar.
-
-7. **💾 Integritas Data & Auto-Backup Terdistribusi**:
-   - Database diperiksa integritasnya secara otomatis (`PRAGMA integrity_check`) sebelum dicadangkan.
-   - Backup otomatis database SQLite dan skrip konfigurasi MikroTik dikirimkan setiap subuh ke akun Telegram Bot pribadi, menjamin data Anda dapat dipulihkan dalam hitungan menit jika terjadi musibah pada hardware fisik.
+Sistem menggunakan konfigurasi IP Pool Kelas A profesional untuk menampung skala ribuan pelanggan tanpa tabrakan IP:
+- **Subnet PPPoE**: `10.10.0.0/21` (Netmask: `255.255.248.0`)
+- **Gateway MikroTik (Local Address)**: `10.10.0.1`
+- **Rentang IP Pelanggan (`pool-pppoe`)**: `10.10.0.2 - 10.10.7.254` (**Kapasitas: 2.046 IP Pelanggan**)
+- **NAT Masquerade**: `chain=srcnat action=masquerade out-interface=ether1-ISP` (Otomatis mencakup semua IP pelanggan).
+- **Remote Router Pelanggan**: Remote Web Management router modem pelanggan (seperti TP-Link TL-WR820N) diakses via IP PPPoE port **80** (contoh: `http://10.10.7.254`) langsung dari jaringan kantor/server tanpa harus datang ke rumah pelanggan.
 
 ---
 
-## 🛠️ Arsitektur & Persyaratan Sistem
+## 🐧 Panduan Lengkap Setup STB Fiberhome HG680P Sebagai Server 24 Jam
 
-- **Node.js**: Versi 20.x atau 22.x LTS ke atas (menggunakan native driver `node:sqlite`).
-- **MikroTik RouterOS**: v6.x atau v7.x dengan port **API (8728)** dan **FTP (21)** aktif.
-- **Perangkat**:
-  - PC Laptop / Desktop (Windows 10/11).
-  - STB B860H / HG680P / Raspberry Pi / TV Box (Armbian Server Linux).
+STB **Fiberhome HG680P** (RAM 2 GB, SoC Amlogic S905X) adalah pilihan terbaik untuk menjalankan server ini non-stop 24 jam dengan konsumsi daya sangat rendah (**~4 Watt** / biaya listrik hanya ~Rp 5.000 - Rp 10.000 per bulan).
+
+```
+[ Router MikroTik ]
+        │ (Kabel LAN)
+        ▼
+[ STB HG680P (Armbian Linux) ] ──> Menjalankan Node.js + Billing Server 24 Jam
+```
+
+### A. Persiapan Bahan & OS Armbian
+1. **1 unit STB Fiberhome HG680P** + adaptor daya 12V 1A.
+2. **1 unit MicroSD** (Kapasitas minimal 16 GB atau 32 GB, disarankan Class 10 / SanDisk Ultra).
+3. **Card Reader** USB.
+4. **Software di PC:** [BalenaEtcher](https://etcher.balena.io/) atau [Rufus](https://rufus.ie/).
+5. **File Image OS:** Unduh image **Armbian Linux Amlogic S905X** (Pilih varian *Debian Bookworm/Bullseye Server* atau *Ubuntu Jammy Server* tanpa desktop GUI).
 
 ---
 
-## 💻 Panduan Instalasi di PC Windows Baru
-
-Jika Anda ingin menjalankan project ini di komputer/laptop Windows yang baru:
-
-### 1. Pasang Software yang Dibutuhkan
-1. Download & install **Node.js (LTS)** dari [nodejs.org](https://nodejs.org/).
-2. Download & install **Git for Windows** dari [git-scm.com](https://git-scm.com/).
-
-### 2. Download Project dari GitHub
-Buka **PowerShell** atau **Terminal**, lalu jalankan:
-```bash
-cd Documents
-git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git
-cd lenxynet-billing
-```
-*(Masukkan kredensial login GitHub Anda jika diminta karena repo bersifat Private)*.
-
-### 3. Install Dependensi Library
-```bash
-npm install
-```
-
-### 4. Pulihkan Database Lama (Opsional)
-Jika ingin membawa data pelanggan lama dari Telegram, ikuti [Langkah Restore Database](#-restore--migrasi-data-dari-backup-telegram).
-
-### 5. Jalankan Server
-```bash
-node server.js
-```
-Akses di browser:
-- **Dashboard Admin**: `http://localhost:3000` (Default: `lenxyadm` / `lenxyadm`)
-- **Portal Pelanggan**: `http://localhost:3000/user.html`
+### B. Flashing OS ke MicroSD & Konfigurasi DTB
+1. Tancapkan MicroSD ke PC menggunakan Card Reader.
+2. Buka BalenaEtcher atau Rufus, pilih file image Armbian (`.img` atau `.img.xz`), pilih drive MicroSD, lalu klik **Flash**.
+3. Setelah proses flash selesai, buka partisi bernama **`BOOT`** di Windows Explorer:
+4. Cari file bernama **`uEnv.txt`** (atau `extlinux/extlinux.conf`), buka dengan Notepad.
+5. Pastikan baris FDT mengarah ke DTB board HG680P:
+   ```text
+   FDT=/dtb/amlogic/meson-gxl-s905x-p212.dtb
+   ```
+6. Simpan file, lalu cabut MicroSD secara aman (*Eject*).
 
 ---
 
-## 🐧 Panduan Instalasi di STB HG680P (Armbian Linux) 24 Jam Non-Stop
+### C. Booting Awal & Login SSH STB
+1. Masukkan MicroSD ke slot kartu memori STB HG680P.
+2. Hubungkan kabel LAN dari port LAN STB ke salah satu port LAN **MikroTik** (misal ether2).
+3. Nyalakan STB.
+4. Buka Winbox di menu **IP -> DHCP Server -> Leases** atau **IP -> ARP**:
+   - Cari perangkat dengan nama `armbian` dan catat alamat IP yang didapat (contoh: `192.168.55.200`).
+5. Buka **PowerShell** atau **PuTTY** di PC/Laptop Anda, lalu remote STB via SSH:
+   ```bash
+   ssh root@192.168.55.200
+   ```
+6. **Password default:** `1234`
+7. Sistem akan meminta Anda memasukkan password baru dan membuat user baru (lewati pembuatan user biasa dengan menekan `Ctrl + C` jika ingin tetap memakai user `root`).
 
-Panduan ini khusus untuk STB HG680P / B860H berbasis **Armbian Server (CLI Tanpa Desktop)** agar server hemat daya, stabil, dan menyala 24 jam non-stop:
+---
 
-### 1. Update Sistem & Install Paket Pendukung
-Login ke terminal STB via SSH (menggunakan PuTTY atau terminal):
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y git curl wget build-essential
-```
+### D. Pindahkan OS ke Memori Internal eMMC
+*(Sangat disarankan agar MicroSD bisa dicabut dan STB bisa hidup mandiri tanpa kartu memori)*:
+1. Di terminal SSH STB, jalankan perintah:
+   ```bash
+   armbian-install
+   ```
+2. Pilih nomor tipe SoC: **Amlogic S905X (p212)**.
+3. Pilih tipe partisi: **ext4**.
+4. Tunggu hingga proses penyalinan selesai 100%.
+5. Matikan STB dengan perintah `poweroff`, cabut kabel daya, cabut MicroSD dari slot, lalu hidupkan kembali STB. STB sekarang sudah menjadi server Linux murni!
 
-### 2. Install Node.js 22 LTS di Armbian (Arsitektur ARM64)
+---
+
+### E. Instalasi Node.js & Dependency di Armbian Linux
+Jalankan rentetan perintah berikut di terminal SSH STB:
+
 ```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-```
-Pastikan instalasi sukses dengan mengecek versinya:
-```bash
+# 1. Update paket sistem Linux
+apt update && apt upgrade -y
+
+# 2. Pasang Git, Curl, dan Build Tools
+apt install -y git curl wget build-essential
+
+# 3. Pasang Node.js LTS (Versi 20 / 22 ARM64)
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt install -y nodejs
+
+# 4. Verifikasi instalasi Node.js
 node -v
 npm -v
+
+# 5. Pasang PM2 (Process Manager agar aplikasi auto-restart & auto-start saat mati lampu)
+npm install -g pm2
 ```
-
-### 3. Clone Repositori Project
-Masuk ke direktori home (bebas di folder mana saja):
-```bash
-cd ~
-git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git
-cd lenxynet-billing
-```
-
-### 4. Install Dependensi
-```bash
-npm install
-```
-
-### 5. Pasang PM2 & Konfigurasi Auto-Start (Server Otomatis Hidup Saat STB Nyala / Mati Lampu)
-Di Armbian, wajib gunakan **PM2 (Production Process Manager)** agar server:
-1. Otomatis berjalan di background 24 jam non-stop (terminal boleh ditutup).
-2. Otomatis menyala sendiri begitu STB mendapat aliran listrik / setelah mati lampu.
-3. Otomatis me-restart aplikasi jika terjadi error/crash.
-
-Jalankan urutan perintah berikut:
-```bash
-# 1. Install PM2 secara global
-sudo npm install -g pm2
-
-# 2. Masuk ke folder project & daftarkan aplikasi ke PM2
-cd ~/lenxynet-billing
-pm2 start server.js --name "lenxynet"
-
-# 3. Simpan daftar proses agar PM2 selalu mengingatnya
-pm2 save
-
-# 4. Generate perintah auto-start sistem Linux
-pm2 startup
-```
-
-> [!IMPORTANT]
-> **Langkah Kunci Auto-Start:**
-> Setelah Anda menjalankan `pm2 startup`, di layar terminal paling bawah akan muncul **1 baris perintah khusus** yang diawali dengan `sudo env PATH=...`.
-> 
-> **Copy baris perintah yang muncul tersebut, paste ke terminal, lalu tekan Enter.**
-> 
-> *Contoh baris perintah yang dimunculkan:*
-> ```bash
-> sudo env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u root --hp /root
-> ```
-
-#### 🧪 Cara Menguji Auto-Start:
-Restart STB Anda dengan perintah:
-```bash
-sudo reboot
-```
-Tunggu 1–2 menit sampai STB booting, lalu buka browser di HP/laptop dan akses `https://emailgratisan.fun` atau `http://IP_STB:3000`. Dashboard langsung bisa diakses tanpa perlu menyentuh terminal lagi!
-
-#### 📋 Perintah Berguna PM2 Sehari-hari:
-- **Melihat status & penggunaan CPU/RAM:** `pm2 status`
-- **Melihat log live (real-time):** `pm2 logs lenxynet` *(keluar dengan `Ctrl + C`)*
-- **Restart server (misal setelah ubah setting):** `pm2 restart lenxynet`
-- **Stop server sementara:** `pm2 stop lenxynet`
 
 ---
 
-## 🌐 Setup Cloudflare Zero Trust Tunnel (Domain Pribadi)
+### F. Deploy Aplikasi LenxyNet & Konfigurasi Auto-Start PM2
 
-Karena Anda menggunakan domain pribadi (misal: `emailgratisan.fun`), Anda **TIDAK MEMERLUKAN** file `cloudflared.exe`.
-
-### Langkah Memasang Connector di STB Armbian:
-
-1. Buka browser di PC/HP, login ke [Cloudflare Zero Trust Dashboard](https://one.dash.cloudflare.com/).
-2. Masuk ke menu **Networks** -> **Tunnels**.
-3. Klik Tunnel yang sudah Anda buat sebelumnya (yang mengarah ke domain Anda).
-4. Klik tab **"Install and run a connector"**:
-   - Pilih OS: **Debian**
-   - Pilih Arsitektur: **arm64 64-bit** (sesuai chipset STB HG680P).
-5. Cloudflare akan menampilkan **satu baris perintah panjang** yang berisi token otentikasi unik Anda, contohnya:
+1. **Clone Repositori Project ke Folder `/var/www/`:**
    ```bash
-   curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64.deb && sudo dpkg -i cloudflared.deb && sudo cloudflared service install eyJhIjoiYmE5Mm...TOKEN_ANDA...
+   mkdir -p /var/www
+   cd /var/www
+   git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git lenxynet
+   cd lenxynet
    ```
-6. **Jalankan Perintah Tersebut di Terminal STB**:
-   - Anda bebas menjalankannya di folder mana saja (bahkan di folder default `~`).
-   - Perintah tersebut akan otomatis mengunduh, menginstall, dan mendaftarkan Cloudflared sebagai **system service background Linux**.
-7. Pastikan konfigurasi **Public Hostname** di Cloudflare Dashboard mengarah ke port lokal STB:
-   - **Service Type**: `HTTP`
-   - **URL**: `localhost:3000` *(atau `127.0.0.1:3000`)*
-8. Selesai! Domain Anda (misal `https://emailgratisan.fun`) kini langsung terhubung ke STB tanpa perlu setting port forwarding di router modem!
+
+2. **Pasang Library Dependensi:**
+   ```bash
+   npm install
+   ```
+
+3. **Salin Database SQLite Lama:**
+   - Salin file `database.sqlite` dari PC ke STB menggunakan aplikasi **WinSCP** (port 22) ke direktori `/var/www/lenxynet/database.sqlite`.
+
+4. **Jalankan Aplikasi dengan PM2:**
+   ```bash
+   pm2 start server.js --name "lenxynet"
+   ```
+
+5. **Kunci Auto-Start Saat STB Menyala / Setelah Mati Lampu:**
+   ```bash
+   pm2 save
+   pm2 startup
+   ```
+   *Salin dan jalankan perintah `sudo env PATH=...` yang dimunculkan oleh PM2 di layar Anda.*
+
+---
+
+### G. Pasang Cloudflare Tunnel ARM64 (Domain https://lenxynet.store)
+Agar domain Anda aktif 24 jam langsung dari STB tanpa perlu komputer menyala:
+
+1. Di terminal SSH STB, unduh binary resmi Cloudflared versi ARM64:
+   ```bash
+   curl -L --output /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64
+   chmod +x /usr/local/bin/cloudflared
+   ```
+2. Pasang Service Tunnel dengan token Cloudflare Anda:
+   ```bash
+   cloudflared service install <TOKEN_CLOUDFLARE_ANDA>
+   ```
+3. Mulai service:
+   ```bash
+   systemctl start cloudflared
+   systemctl enable cloudflared
+   ```
+4. Buka **https://lenxynet.store** di browser HP/PC — Server billing kini aktif online 24 jam non-stop dari STB!
+
+---
+
+## 💻 Panduan Instalasi di PC Windows Baru (Alternatif)
+
+Jika Anda ingin menjalankan project ini di komputer/laptop Windows:
+1. Pasang **Node.js LTS** dari [nodejs.org](https://nodejs.org/).
+2. Pasang **Git for Windows** dari [git-scm.com](https://git-scm.com/).
+3. Buka PowerShell dan clone repositori:
+   ```powershell
+   git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git
+   cd lenxynet-billing
+   npm install
+   node server.js
+   ```
 
 ---
 
 ## 📦 Restore & Migrasi Data dari Backup Telegram
 
-Karena database (`database.sqlite`) dan file bukti transfer sengaja tidak di-commit ke GitHub demi keamanan privasi pelanggan, ikuti langkah ini untuk mengembalikan data lama ke PC/STB baru:
-
-1. Buka aplikasi Telegram di HP atau PC Anda.
-2. Masuk ke chat Bot Backup Anda (`@lendatabackup_bot`).
-3. Cari pesan **`[AUTO-BACKUP DATABASE LENXYNET]`** terbaru.
-4. Download file dokumen yang berekstensi `.sqlite` (contoh: `lenxynet-backup-2026-11-04-1793829746.sqlite`).
-5. Ubah nama (Rename) file tersebut menjadi:
-   ```text
-   database.sqlite
-   ```
-6. Pindahkan file `database.sqlite` tersebut ke dalam folder project `lenxynet-billing/`.
-   - *Jika di STB via SSH:* Anda bisa upload file via **WinSCP** atau **FileZilla** (SFTP port 22).
-7. Restart server (`node server.js` atau `pm2 restart lenxynet`).
-8. Seluruh data pelanggan, tagihan, paket internet, dan pengaturan bot langsung pulih 100%!
+1. Buka aplikasi Telegram, masuk ke chat Bot Backup Anda (`@lendatabackup_bot`).
+2. Unduh file `.sqlite` terbaru (misal: `lenxynet-backup-YYYY-MM-DD.sqlite`).
+3. Ubah nama (*rename*) menjadi **`database.sqlite`**.
+4. Letakkan file `database.sqlite` ke dalam direktori project.
+5. Restart server (`pm2 restart lenxynet` atau `node server.js`). Seluruh data pelanggan dan tagihan langsung pulih 100%!
 
 ---
 
-## ⚙️ Pengaturan Dashboard & Koneksi Awal
+## ⏰ Jadwal Otomatis Cron Job & Fitur Toggle ON / OFF
 
-Setelah server berjalan di PC baru / STB:
+Sistem menjalankan jadwal otomatis di latar belakang yang dikelola oleh [`cron.js`](cron.js):
 
-1. **Akses Dashboard Admin**:
-   - Buka browser: `http://IP_STB_ANDA:3000` (contoh: `http://192.168.55.254:3000`).
-   - Login dengan username `lenxyadm` dan password `lenxyadm`.
-2. **Koneksi WhatsApp (Baileys Multi-Device)**:
-   - Dashboard akan menampilkan QR Code WhatsApp.
-   - Buka WhatsApp di HP Anda -> Titik Tiga Kanan Atas -> **Perangkat Tertaut** -> **Tautkan Perangkat** -> Scan QR code.
-   - Status akan otomatis berubah menjadi **Terhubung** (indikator hijau).
-3. **Koneksi Router MikroTik**:
-   - Klik tombol **Pengaturan Router** (icon gear router di header dashboard).
-   - Masukkan IP Router (misal `192.168.55.1`), port API (`8728`), username router (`admin`), dan password.
-   - Klik **Simpan & Hubungkan**.
-4. **Domain Publik untuk Notifikasi WA Pelanggan**:
-   - Masuk ke Tab **Pengaturan** di dashboard.
-   - Pada kolom **Public Portal URL (Domain Luar)**, isi domain Cloudflare Anda:
-     ```text
-     https://emailgratisan.fun
-     ```
-   - Klik **Simpan Pengaturan**. Sekarang tautan cek tagihan dan bayar QRIS yang dikirimkan via WhatsApp ke pelanggan otomatis menggunakan domain resmi Anda!
-
----
-
-## ⏰ Jadwal Otomatis (Cron Job)
-
-Sistem sudah dilengkapi dengan scheduler otomatis di [`cron.js`](cron.js):
-
-| Jam (WIB) | Fungsi Otomatis | Keterangan |
+| Jam (WIB) | Fungsi Otomatis | Pengaruh Toggle Cron |
 | :--- | :--- | :--- |
-| **00:01** | **Auto-Isolir Pelanggan** | Mematikan secret PPPoE pelanggan yang jatuh tempo melewati toleransi hari. |
-| **03:00** | **Auto-Backup Database** | Snapshot SQLite aman (`VACUUM INTO`) + kirim file `.sqlite` ke Telegram. |
-| **03:00** | **Clean Bukti Usang** | Membersihkan foto bukti transfer lunas yang berusia > 60 hari dari disk. |
-| **03:05** | **Auto-Backup MikroTik** | Mengirimkan 2 file ke Telegram: Full System (`.backup`) dan Portable Script (`.rsc`). |
-| **08:30** | **WhatsApp Reminder** | Mengirimkan notifikasi tagihan H-3 jatuh tempo dan peringatan isolir H+1. |
+| **00:01** | **Auto-Isolir Pelanggan** (Memutus secret PPPoE & kick active session bagi yang lewat batas jatuh tempo + toleransi). | **Dijeda jika Toggle OFF** |
+| **08:30** | **WhatsApp Reminder Pagi** (Notifikasi tagihan H-3 sebelum jatuh tempo & peringatan isolir H+1). | **Dijeda jika Toggle OFF** |
+| **03:00** | **Pembersihan Disk Storage** (Menghapus bukti transfer lunas > 60 hari & file orphan tak terdaftar). | Tetap Berjalan |
+| **03:00** | **Cloud Backup Database SQLite** (Kirim file snapshot aman ke bot Telegram). | Tetap Berjalan |
+| **03:05** | **Cloud Backup MikroTik** (Ekspor `.backup` & `.rsc` portable dan kirim ke Telegram). | Tetap Berjalan |
+
+> [!TIP]
+> **Di mana Toggle Cron Job Berada?**
+> Toggle switch ON/OFF dapat ditemukan di:
+> 1. Kartu **Toleransi Isolir** di halaman utama dashboard.
+> 2. Menu **Dropdown Pengaturan** di header atas desktop.
+> 3. Menu drawer navigasi mobile/tablet.
+
+---
+
+## 📝 Editor Massal 394 Pelanggan (`/editor.html`)
+
+Tersedia spreadsheet online bawaan di `https://lenxynet.store/editor.html` untuk mengedit tanggal jatuh tempo dan nomor WhatsApp seluruh 394 pelanggan secara cepat:
+- **Pencarian Real-Time**: Cari username atau nama paket instan.
+- **Unduh Excel**: Ekspor data ke format `.csv` siap buka di Microsoft Excel.
+- **1-Click Winbox Script Generator**: Tombol **"Buat Script Winbox (.rsc)"** menghasilkan perintah RouterOS siap paste ke *New Terminal* MikroTik untuk memperbarui komentar jatuh tempo dan nomor HP secara massal dalam hitungan detik.
 
 ---
 
 ## 📄 Lisensi & Hak Cipta
-Hak Cipta © 2026 **LenxyNet Management**. Dikelola secara mandiri oleh `markhanprasetiyo01-wq`.
+Hak Cipta © 2026 **LenxyNet Billing & Management System**. Dikelola secara mandiri oleh `markhanprasetiyo01-wq`.
