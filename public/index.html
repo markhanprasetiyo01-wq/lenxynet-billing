@@ -2039,11 +2039,6 @@
           <!-- Sub-opsi Lunas -->
           <div id="manual-paid-suboptions" class="pl-6 space-y-2 pt-1 pb-1">
             <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
-              <input type="checkbox" id="manual-unisolir-check" checked
-                class="rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-0">
-              <span>Buka Isolir MikroTik Langsung (Aktifkan secret sekarang)</span>
-            </label>
-            <label class="flex items-center space-x-2 text-xs text-slate-300 cursor-pointer">
               <input type="checkbox" id="manual-wa-receipt-check" checked
                 class="rounded border-slate-700 bg-slate-900 text-emerald-500 focus:ring-0">
               <span>Kirim Notifikasi / Struk Lunas via WhatsApp ke Pelanggan</span>
@@ -4956,8 +4951,6 @@ _LenxyNet Fiber_`
         document.getElementById('manual-radio-paid').checked = true;
       }
 
-      // Checkbox unisolir default checked jika terisolir
-      document.getElementById('manual-unisolir-check').checked = isIsolated;
       // Checkbox wa default checked jika punya nomor telepon
       document.getElementById('manual-wa-receipt-check').checked = Boolean(phone && phone !== '-');
 
@@ -4983,7 +4976,7 @@ _LenxyNet Fiber_`
     async function submitManualBillStatus() {
       if (!currentManualBillCustomerId) return;
       const targetStatus = document.querySelector('input[name="manual_bill_target"]:checked')?.value || 'paid';
-      const unisolir = document.getElementById('manual-unisolir-check').checked;
+      const unisolir = true; // Selalu buka isolir otomatis di MikroTik saat ditandai Lunas
       const sendWaReceipt = document.getElementById('manual-wa-receipt-check').checked;
 
       const btn = document.getElementById('btn-save-manual-bill');
