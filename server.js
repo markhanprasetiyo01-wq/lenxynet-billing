@@ -1273,6 +1273,10 @@ app.post('/api/admin/customers/:id/update-due-date', requireAdminAuth, requireMi
   try {
     await updateCustomerDueDateInMikrotik(cust.pppoe_username, numDue);
     logActivity('UPDATE_CUSTOMER', `Ubah jatuh tempo ${cust.pppoe_username} dari tgl ${cust.due_date} ke tgl ${numDue}`, cust.pppoe_username);
+
+    // Langsung jalankan pengecekan isolir agar status tagihan & isolir sinkron seketika
+    runAutoIsolirCheck().catch(e => console.warn('[Auto-Isolir Update DueDate] Error:', e.message));
+
     res.json({ 
       success: true, 
       message: `Tanggal jatuh tempo ${cust.pppoe_username} berhasil diubah ke tgl ${numDue} dan disinkronkan ke MikroTik!`,
@@ -1398,6 +1402,18 @@ app.get('/api/admin/customers', async (req, res) => {
       ORDER BY c.id DESC
     `;
     const customers = db.prepare(query).all(currentPeriod);
+
+    // Pastikan setiap pelanggan memiliki tagihan di periode berjalan (default: 'unpaid')
+    customers.forEach(c => {
+      if (!c.bill_id) {
+        const amount = c.plan_price || 100000;
+        const ins = db.prepare('INSERT INTO bills (customer_id, period, amount, status) VALUES (?, ?, ?, ?)').run(c.id, currentPeriod, amount, 'unpaid');
+        c.bill_id = ins.lastInsertRowid;
+        c.bill_status = 'unpaid';
+        c.bill_amount = amount;
+        c.bill_period = currentPeriod;
+      }
+    });
 
     // Ambil data konflik nomor telepon
     const conflicts = getDataConflicts();

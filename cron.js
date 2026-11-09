@@ -103,21 +103,22 @@ async function runAutoIsolirCheck(baseUrl) {
       }
     }
 
-    // 2. CEK ISOLIR JATUH TEMPO
+    // 2. CEK ISOLIR JATUH TEMPO (Tegakkan Konsistensi Antara MikroTik & Database)
     if (c.bill_status === 'unpaid' && isOverdue) {
-      if (c.status !== 'isolated') {
-        console.log(`[Auto-Isolir] Mengisolir ${c.name} (${c.pppoe_username}) karena telat bayar melewati batas tgl ${deadlineFormatted}`);
-        try {
-          await setMikrotikSecretStatus(c.pppoe_username, false);
+      try {
+        // Selalu pastikan secret di MikroTik dalam kondisi disabled & sesi aktif ditendang
+        await setMikrotikSecretStatus(c.pppoe_username, false);
+        if (c.status !== 'isolated') {
+          console.log(`[Auto-Isolir] Mengisolir ${c.name} (${c.pppoe_username}) karena telat bayar melewati batas tgl ${deadlineFormatted}`);
           db.prepare("UPDATE customers SET status = 'isolated' WHERE id = ?").run(c.id);
           isolatedCount++;
           try {
             db.prepare("INSERT INTO activity_logs (action, details, target, status) VALUES ('ISOLIR', ?, ?, 'success')")
               .run(`Pelanggan diisolir otomatis (lewat batas tgl ${deadlineFormatted})`, c.pppoe_username);
           } catch(e) {}
-        } catch (err) {
-          console.error(`[Auto-Isolir] Gagal isolir ${c.pppoe_username}:`, err.message);
         }
+      } catch (err) {
+        console.error(`[Auto-Isolir] Gagal isolir ${c.pppoe_username}:`, err.message);
       }
     } else if (c.bill_status === 'paid' && c.status === 'isolated') {
       console.log(`[Auto-Isolir] Memulihkan akses ${c.name} (${c.pppoe_username}) karena sudah lunas.`);

@@ -287,15 +287,53 @@ async function syncFromMikrotik() {
         `).run(username, finalPhone, password, planId, dueDate, status, customer.id);
       }
 
-      // Pastikan ada tagihan untuk bulan berjalan (2026-11)
-      const currentPeriod = '2026-11';
-      const bill = db.prepare('SELECT id, status FROM bills WHERE customer_id = ? AND period = ?').get(customer.id, currentPeriod);
+      // Pastikan ada tagihan untuk bulan berjalan (Dinamis: Tahun-Bulan saat ini)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      const currentDay = now.getDate();
+      const currentPeriod = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+
+      // Cek apakah pelanggan sudah lewat tanggal jatuh tempo + masa toleransi
+      let isCustomerOverdue = false;
+      if (dueDate) {
+        const toleranceDays = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'tolerance_days'").get()?.value || '1', 10);
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
+        const effectiveDueDate = Math.min(dueDate, daysInMonth);
+        const dueDateTime = new Date(currentYear, currentMonth - 1, effectiveDueDate);
+        const deadlineTime = new Date(dueDateTime);
+        deadlineTime.setDate(deadlineTime.getDate() + toleranceDays);
+        const todayTime = new Date(currentYear, currentMonth - 1, currentDay);
+        isCustomerOverdue = todayTime.getTime() > deadlineTime.getTime();
+      }
+
+      let bill = db.prepare('SELECT id, status FROM bills WHERE customer_id = ? AND period = ?').get(customer.id, currentPeriod);
       if (!bill) {
-        const billStatus = isDisabled ? 'unpaid' : 'paid';
-        db.prepare(`
+        // Tagihan baru dibuat sebagai 'unpaid' jika sudah lewat jatuh tempo atau MikroTik disabled
+        const billStatus = (isDisabled || isCustomerOverdue) ? 'unpaid' : 'unpaid';
+        const infoBill = db.prepare(`
           INSERT INTO bills (customer_id, period, amount, status)
           VALUES (?, ?, ?, ?)
         `).run(customer.id, currentPeriod, planPrice, billStatus);
+        bill = { id: infoBill.lastInsertRowid, status: billStatus };
+      }
+
+      // KONSISTENSI DATA DATABASE VS MIKROTIK:
+      // 1. Jika tagihan belum bayar & sudah lewat jatuh tempo + toleransi -> WAJIB TERISOLIR
+      if (bill.status === 'unpaid' && isCustomerOverdue) {
+        db.prepare("UPDATE customers SET status = 'isolated' WHERE id = ?").run(customer.id);
+        if (!isDisabled) {
+          // Jika di MikroTik masih menyala, matikan seketika dan putus sesi aktif
+          setMikrotikSecretStatus(username, false).catch(e => {
+            console.warn(`[Sync Enforce Isolir] Gagal matikan MikroTik untuk ${username}:`, e.message);
+          });
+        }
+      } else if (bill.status === 'paid' && isDisabled) {
+        // 2. Jika tagihan sudah lunas tetapi di MikroTik masih disabled -> Pulihkan / Buka isolir
+        db.prepare("UPDATE customers SET status = 'active' WHERE id = ?").run(customer.id);
+        setMikrotikSecretStatus(username, true).catch(e => {
+          console.warn(`[Sync Enforce Unisolir] Gagal aktifkan MikroTik untuk ${username}:`, e.message);
+        });
       }
     }
 
@@ -406,11 +444,14 @@ async function addCustomerToMikrotik({ name, password, profile, phone, dueDate, 
     `).run(name, phone ? String(phone).trim() : '-', name, password, planId, dueDate || 10, status);
 
     // Buat tagihan bulan berjalan (status: paid atau unpaid)
+    const nowTime = new Date();
+    const curPeriodKey = `${nowTime.getFullYear()}-${String(nowTime.getMonth() + 1).padStart(2, '0')}`;
     db.prepare(`
       INSERT INTO bills (customer_id, period, amount, status, paid_at, payment_method)
-      VALUES (?, '2026-11', ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?)
     `).run(
       info.lastInsertRowid, 
+      curPeriodKey,
       planPrice, 
       isPaid ? 'paid' : 'unpaid', 
       isPaid ? new Date().toISOString() : null, 
