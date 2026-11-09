@@ -311,23 +311,31 @@ async function setMikrotikSecretStatus(username, enable) {
 
     if (targetSecret) {
       const ros = api.rosApi;
+      const secretId = targetSecret['.id'] || targetSecret.id;
       if (enable) {
         // Aktifkan Secret di MikroTik via RouterOS API command
-        await ros.write(['/ppp/secret/enable', '=.id=' + targetSecret.id]);
+        await ros.write(['/ppp/secret/enable', '=.id=' + secretId]);
+        console.log(`[Unisolir] Secret '${username}' berhasil diaktifkan kembali (enable) di MikroTik.`);
       } else {
         // Matikan Secret di MikroTik via RouterOS API command
-        await ros.write(['/ppp/secret/disable', '=.id=' + targetSecret.id]);
+        await ros.write(['/ppp/secret/disable', '=.id=' + secretId]);
+        console.log(`[Isolir] Secret '${username}' berhasil dinonaktifkan (disable) di MikroTik.`);
 
-        // Tendang koneksi aktif seketika (Kill Active Session)
+        // Tendang SEMUA koneksi aktif seketika (Kill Active Session)
         try {
           const activeMenu = client.menu('/ppp active');
           const actives = await activeMenu.get();
-          const targetActive = actives.find(a => a.name === username);
-          if (targetActive) {
-            await ros.write(['/ppp/active/remove', '=.id=' + targetActive.id]);
+          const targetActives = actives.filter(a => a.name === username);
+          for (const act of targetActives) {
+            const actId = act['.id'] || act.id;
+            await ros.write(['/ppp/active/remove', '=.id=' + actId]);
+            console.log(`[Isolir] Berhasil memutus koneksi aktif '${username}' (ID: ${actId}) dari /ppp active.`);
+          }
+          if (targetActives.length === 0) {
+            console.log(`[Isolir] Pelanggan '${username}' tidak sedang memiliki sesi online di /ppp active.`);
           }
         } catch (e) {
-          console.warn('No active session to remove or remove error:', e.message);
+          console.warn(`[Isolir] Gagal me-remove active session '${username}':`, e.message);
         }
       }
     }
@@ -430,9 +438,10 @@ async function removeCustomerFromMikrotik(username, id) {
     try {
       const activeMenu = client.menu('/ppp active');
       const actives = await activeMenu.get();
-      const act = actives.find(a => a.name === username);
-      if (act) {
-        await api.rosApi.write(['/ppp/active/remove', '=.id=' + act.id]);
+      const targetActives = actives.filter(a => a.name === username);
+      for (const act of targetActives) {
+        const actId = act['.id'] || act.id;
+        await api.rosApi.write(['/ppp/active/remove', '=.id=' + actId]);
       }
     } catch (e) {}
 
