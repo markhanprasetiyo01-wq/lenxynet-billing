@@ -156,38 +156,39 @@
 
     <!-- Top Navigation Bar -->
     <header class="bg-brand-card/95 backdrop-blur-md border-b border-brand-border/80 sticky top-0 z-40">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <div class="flex items-center space-x-3">
+      <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
+        
+        <!-- Brand / Logo (Kiri) -->
+        <div class="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
           <div
             class="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-sky-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-sky-500/20 shrink-0">
             <i class="fa-solid fa-network-wired text-white text-sm sm:text-base"></i>
           </div>
           <div>
-            <div class="flex items-center gap-1.5 sm:gap-2">
-              <h1 class="text-sm sm:text-base font-bold text-white tracking-tight">LenxyNet</h1>
+            <div class="flex items-center gap-1.5">
+              <h1 class="text-sm sm:text-base font-black text-white tracking-tight">LenxyNet</h1>
               <span
-                class="text-[9px] sm:text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/25">Billing
-                OS</span>
+                class="text-[9px] font-bold tracking-wider px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/25">Billing OS</span>
             </div>
-            <p class="text-[10px] sm:text-[11px] text-slate-400 font-medium hidden xs:block">MikroTik RouterOS 6.45.9
-            </p>
+            <p class="text-[10px] text-slate-400 font-medium hidden sm:block">ISP & MikroTik Management</p>
           </div>
         </div>
 
-        <!-- DESKTOP NAV ACTIONS (Visible on Desktop / sm+) -->
-        <div class="hidden md:flex items-center space-x-2 sm:space-x-3">
-          <!-- WA Status (Clickable for QR Scan Modal) -->
+        <!-- DESKTOP NAV ACTIONS (Visible on Large Screens lg+) -->
+        <div class="hidden lg:flex items-center space-x-2 xl:space-x-2.5">
+
+          <!-- WA Live Status Pill -->
           <button onclick="openWAModal()" id="wa-status-btn"
-            class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-xs transition active:scale-95"
-            title="Klik untuk Scan QR WhatsApp">
+            class="flex items-center space-x-2 px-2.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-800 text-xs transition active:scale-95 shrink-0"
+            title="Klik untuk Scan QR / Status WhatsApp">
             <span id="wa-dot" class="w-2 h-2 rounded-full bg-amber-400"></span>
-            <span class="text-slate-400">WA:</span>
+            <span class="text-slate-400 font-medium">WA:</span>
             <span id="wa-text" class="text-amber-400 font-semibold">Memeriksa...</span>
           </button>
 
-          <!-- MikroTik IP Status & Settings Button -->
+          <!-- MikroTik IP Status & Settings Pill -->
           <button onclick="openRouterSettingsModal()" id="router-status-btn"
-            class="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 group"
+            class="flex items-center space-x-2 px-2.5 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 group shrink-0"
             title="Pengaturan Koneksi MikroTik">
             <span id="router-status-dot" class="w-2 h-2 rounded-full bg-rose-500"></span>
             <i class="fa-solid fa-server text-slate-400 group-hover:text-sky-400 text-[11px] transition"></i>
@@ -195,72 +196,128 @@
             <i class="fa-solid fa-gear text-slate-500 group-hover:text-white text-[10px]"></i>
           </button>
 
-          <!-- QRIS Toko & WhatsApp Admin Settings Button -->
-          <button onclick="openQrisSettingsModal()" id="qris-settings-btn"
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 group"
-            title="Pengaturan QRIS Toko & Notifikasi WA">
-            <i class="fa-solid fa-qrcode text-slate-400 group-hover:text-cyan-400 text-[11px] transition"></i>
-            <span class="text-slate-300 text-[11px]">QRIS Toko</span>
-            <i class="fa-solid fa-gear text-slate-500 group-hover:text-white text-[10px]"></i>
-          </button>
-
-          <!-- Telegram Cloud Backup Settings Button -->
-          <button onclick="openTelegramModal()" id="telegram-settings-btn"
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 group"
-            title="Pengaturan Integrasi & Backup Telegram">
-            <i class="fa-brands fa-telegram text-sky-400 group-hover:text-sky-300 text-[13px] transition"></i>
-            <span class="text-slate-300 text-[11px]">Telegram</span>
-            <i class="fa-solid fa-gear text-slate-500 group-hover:text-white text-[10px]"></i>
-          </button>
-
-          <!-- Template Pesan WhatsApp Button -->
-          <button onclick="openMessageTemplatesModal()" id="msg-templates-btn"
-            class="flex items-center space-x-1.5 px-3 py-1.5 rounded-full bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-xs transition active:scale-95 group"
-            title="Kelola Semua Template Pesan WhatsApp di Database">
-            <i class="fa-brands fa-whatsapp text-emerald-400 group-hover:text-emerald-300 text-[13px] transition"></i>
-            <span class="text-slate-300 text-[11px]">Template WA</span>
-            <i class="fa-solid fa-gear text-slate-500 group-hover:text-white text-[10px]"></i>
-          </button>
-
-          <!-- Admin Profile -->
-          <button onclick="openAdminAccountModal()"
-            class="px-3 py-1.5 text-xs font-semibold bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-xl transition flex items-center gap-1.5 active:scale-95"
-            title="Akun & Password Admin">
-            <i class="fa-solid fa-user-shield text-sky-400 text-[11px]"></i>
-            <span id="nav-admin-username">Admin</span>
-          </button>
-
-          <!-- Add Customer Button -->
+          <!-- Quick Add Customer Button -->
           <button onclick="openAddModal()"
-            class="px-3.5 py-1.5 text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white rounded-xl transition shadow-md shadow-sky-600/25 flex items-center gap-1.5 active:scale-95 shrink-0">
+            class="px-3.5 py-1.5 text-xs font-semibold bg-gradient-to-r from-sky-600 to-cyan-600 hover:from-sky-500 hover:to-cyan-500 text-white rounded-xl transition shadow-md shadow-sky-600/25 flex items-center gap-1.5 active:scale-95 shrink-0">
             <i class="fa-solid fa-user-plus text-[11px]"></i>
-            <span>Tambah Pelanggan</span>
+            <span>+ Tambah Pelanggan</span>
           </button>
 
-          <!-- User Portal Link -->
-          <a href="/user.html" target="_blank"
-            class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700/80 rounded-xl transition flex items-center gap-1.5 shrink-0"
-            title="Buka Portal Pelanggan">
-            <i class="fa-solid fa-mobile-screen text-[11px] text-sky-400"></i>
-            <span>Portal User</span>
-          </a>
+          <!-- PENGATURAN DROPDOWN (Merampingkan Menu agar Tidak Penuh) -->
+          <div class="relative" id="nav-settings-dropdown-wrapper">
+            <button onclick="toggleNavDropdown('settings')" id="settings-dropdown-btn"
+              class="px-3 py-1.5 text-xs font-semibold bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-xl transition flex items-center gap-1.5 active:scale-95 group shrink-0"
+              title="Menu Pengaturan Sistem">
+              <i class="fa-solid fa-sliders text-sky-400 text-xs transition"></i>
+              <span>Pengaturan</span>
+              <i class="fa-solid fa-chevron-down text-[9px] text-slate-500 group-hover:text-slate-300 transition duration-200" id="chevron-settings"></i>
+            </button>
 
-          <!-- Logout Button -->
-          <button onclick="logoutAdmin()"
-            class="w-8 h-8 rounded-xl bg-slate-900/90 hover:bg-rose-950/80 text-slate-400 hover:text-rose-400 border border-slate-700/80 hover:border-rose-800 flex items-center justify-center transition active:scale-95"
-            title="Keluar / Logout Admin">
-            <i class="fa-solid fa-arrow-right-from-bracket text-xs"></i>
-          </button>
+            <!-- Dropdown Menu Box -->
+            <div id="nav-settings-menu"
+              class="hidden absolute right-0 mt-2 w-64 bg-slate-900/98 backdrop-blur-xl border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 space-y-1 modal-enter">
+              <div class="px-3 py-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                Konfigurasi Sistem
+              </div>
+              <button onclick="openRouterSettingsModal(); closeNavDropdowns();"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center gap-2.5 transition">
+                <i class="fa-solid fa-server text-sky-400 w-4 text-center"></i>
+                <div>
+                  <div class="font-semibold">Koneksi MikroTik</div>
+                  <div class="text-[10px] text-slate-400">IP Host, Port & API RouterOS</div>
+                </div>
+              </button>
+              <button onclick="openQrisSettingsModal(); closeNavDropdowns();"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center gap-2.5 transition">
+                <i class="fa-solid fa-qrcode text-cyan-400 w-4 text-center"></i>
+                <div>
+                  <div class="font-semibold">QRIS & Notifikasi WA</div>
+                  <div class="text-[10px] text-slate-400">QRIS Toko & No HP Konfirmasi</div>
+                </div>
+              </button>
+              <button onclick="openTelegramModal(); closeNavDropdowns();"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center gap-2.5 transition">
+                <i class="fa-brands fa-telegram text-sky-400 w-4 text-center text-sm"></i>
+                <div>
+                  <div class="font-semibold">Integrasi Telegram</div>
+                  <div class="text-[10px] text-slate-400">Bot Notifikasi & Cloud Backup</div>
+                </div>
+              </button>
+              <button onclick="openMessageTemplatesModal(); closeNavDropdowns();"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center gap-2.5 transition">
+                <i class="fa-brands fa-whatsapp text-emerald-400 w-4 text-center text-sm"></i>
+                <div>
+                  <div class="font-semibold">Template Pesan WhatsApp</div>
+                  <div class="text-[10px] text-slate-400">Kelola Format Pesan Tagihan</div>
+                </div>
+              </button>
+              
+              <div class="border-t border-slate-800/80 my-1"></div>
+              <div class="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Akses & Alat
+              </div>
+              <a href="/editor.html" target="_blank" onclick="closeNavDropdowns()"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center justify-between transition">
+                <span class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-table-cells text-amber-400 w-4 text-center"></i>
+                  <span>Editor Pelanggan Massal</span>
+                </span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
+              </a>
+              <a href="/user.html" target="_blank" onclick="closeNavDropdowns()"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center justify-between transition">
+                <span class="flex items-center gap-2.5">
+                  <i class="fa-solid fa-mobile-screen text-sky-400 w-4 text-center"></i>
+                  <span>Portal Pelanggan</span>
+                </span>
+                <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
+              </a>
+            </div>
+          </div>
+
+          <!-- ADMIN PROFILE & LOGOUT DROPDOWN -->
+          <div class="relative" id="nav-admin-dropdown-wrapper">
+            <button onclick="toggleNavDropdown('admin')" id="admin-dropdown-btn"
+              class="px-2.5 sm:px-3 py-1.5 text-xs font-semibold bg-slate-900/90 hover:bg-slate-800 text-slate-300 border border-slate-700/80 rounded-xl transition flex items-center gap-1.5 active:scale-95 group shrink-0"
+              title="Profil & Logout">
+              <i class="fa-solid fa-circle-user text-sky-400 text-sm"></i>
+              <span id="nav-admin-username" class="max-w-[70px] truncate">Admin</span>
+              <i class="fa-solid fa-chevron-down text-[9px] text-slate-500 group-hover:text-slate-300 transition duration-200" id="chevron-admin"></i>
+            </button>
+
+            <!-- Admin Dropdown Box -->
+            <div id="nav-admin-menu"
+              class="hidden absolute right-0 mt-2 w-48 bg-slate-900/98 backdrop-blur-xl border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 space-y-1 modal-enter">
+              <div class="px-3 py-2 text-[10px] text-slate-400 border-b border-slate-800">
+                <div>Masuk sebagai:</div>
+                <div class="font-bold text-white text-xs truncate" id="nav-admin-username-menu">Admin</div>
+              </div>
+              <button onclick="openAdminAccountModal(); closeNavDropdowns();"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center gap-2.5 transition">
+                <i class="fa-solid fa-key text-sky-400 w-4 text-center"></i>
+                <span>Ganti Password</span>
+              </button>
+              <div class="border-t border-slate-800/80 my-1"></div>
+              <button onclick="logoutAdmin(); closeNavDropdowns();"
+                class="w-full px-3 py-2 rounded-xl text-left text-xs text-rose-300 hover:bg-rose-950/50 hover:text-rose-200 flex items-center gap-2.5 transition">
+                <i class="fa-solid fa-arrow-right-from-bracket text-rose-400 w-4 text-center"></i>
+                <span>Keluar / Logout</span>
+              </button>
+            </div>
+          </div>
+
         </div>
 
-        <!-- MOBILE HAMBURGER TOGGLE BUTTON (Visible only on Mobile) -->
-        <div class="flex items-center space-x-2 md:hidden">
+        <!-- MOBILE / TABLET NAV TOGGLE (Visible on < lg) -->
+        <div class="flex items-center space-x-2 lg:hidden">
           <!-- Quick Add Button on Mobile Header -->
           <button onclick="openAddModal()"
-            class="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center transition active:scale-95 shadow-md shadow-sky-600/25"
+            class="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-sky-600 to-cyan-600 text-white flex items-center gap-1.5 text-xs font-semibold shadow-md shadow-sky-600/25 active:scale-95"
             title="Tambah Pelanggan">
             <i class="fa-solid fa-plus text-xs"></i>
+            <span class="hidden xs:inline">Pelanggan</span>
           </button>
+          
           <!-- Hamburger Menu Button -->
           <button onclick="toggleMobileNav()" id="mobile-hamburger-btn"
             class="w-9 h-9 rounded-xl bg-slate-900 border border-slate-700/80 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-95">
@@ -269,9 +326,9 @@
         </div>
       </div>
 
-      <!-- MOBILE DROPDOWN DRAWER -->
+      <!-- MOBILE / TABLET DROPDOWN DRAWER -->
       <div id="mobile-nav-drawer"
-        class="hidden md:hidden border-t border-brand-border/80 bg-brand-card/98 px-4 py-4 space-y-3 backdrop-blur-lg">
+        class="hidden lg:hidden border-t border-brand-border/80 bg-brand-card/98 px-4 py-4 space-y-3 backdrop-blur-xl">
         <!-- Status Badges in Mobile Drawer -->
         <div class="grid grid-cols-2 gap-2 text-xs">
           <button onclick="openWAModal(); toggleMobileNav();"
@@ -294,54 +351,53 @@
           </button>
         </div>
 
-        <!-- Action Links & Settings -->
+        <!-- Action Links & Settings in Mobile Drawer -->
         <div class="pt-2 border-t border-brand-border/60 space-y-1.5 text-xs">
           <button onclick="openRouterSettingsModal(); toggleMobileNav();"
             class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
-            <span class="flex items-center gap-2.5"><i class="fa-solid fa-server text-sky-400 text-sm"></i> Pengaturan
-              Koneksi MikroTik</span>
+            <span class="flex items-center gap-2.5"><i class="fa-solid fa-server text-sky-400 text-sm w-4 text-center"></i> Pengaturan Koneksi MikroTik</span>
             <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
           </button>
 
           <button onclick="openQrisSettingsModal(); toggleMobileNav();"
             class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
-            <span class="flex items-center gap-2.5"><i class="fa-solid fa-qrcode text-cyan-400 text-sm"></i> Pengaturan
-              QRIS Toko & WA Admin</span>
+            <span class="flex items-center gap-2.5"><i class="fa-solid fa-qrcode text-cyan-400 text-sm w-4 text-center"></i> Pengaturan QRIS & WA Admin</span>
             <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
           </button>
 
           <button onclick="openTelegramModal(); toggleMobileNav();"
             class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
-            <span class="flex items-center gap-2.5"><i class="fa-brands fa-telegram text-sky-400 text-sm"></i> Integrasi
-              Telegram & Cloud Backup</span>
+            <span class="flex items-center gap-2.5"><i class="fa-brands fa-telegram text-sky-400 text-sm w-4 text-center"></i> Integrasi Telegram & Cloud Backup</span>
             <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
           </button>
 
           <button onclick="openMessageTemplatesModal(); toggleMobileNav();"
             class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
-            <span class="flex items-center gap-2.5"><i class="fa-brands fa-whatsapp text-emerald-400 text-sm"></i> Kelola
-              Template Pesan WhatsApp</span>
+            <span class="flex items-center gap-2.5"><i class="fa-brands fa-whatsapp text-emerald-400 text-sm w-4 text-center"></i> Kelola Template Pesan WhatsApp</span>
             <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
           </button>
 
-          <button onclick="openAdminAccountModal(); toggleMobileNav();"
+          <a href="/editor.html" target="_blank"
             class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
-            <span class="flex items-center gap-2.5"><i class="fa-solid fa-user-shield text-sky-400 text-sm"></i> Akun &
-              Password Admin (<span id="nav-admin-username-mobile" class="text-sky-300">Admin</span>)</span>
-            <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
-          </button>
-
-          <a href="/user.html" target="_blank"
-            class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
-            <span class="flex items-center gap-2.5"><i class="fa-solid fa-mobile-screen text-sky-400 text-sm"></i> Buka
-              Portal Pelanggan</span>
+            <span class="flex items-center gap-2.5"><i class="fa-solid fa-table-cells text-amber-400 text-sm w-4 text-center"></i> Editor Pelanggan Massal</span>
             <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
           </a>
 
+          <a href="/user.html" target="_blank"
+            class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
+            <span class="flex items-center gap-2.5"><i class="fa-solid fa-mobile-screen text-sky-400 text-sm w-4 text-center"></i> Buka Portal Pelanggan</span>
+            <i class="fa-solid fa-arrow-up-right-from-square text-[10px] text-slate-500"></i>
+          </a>
+
+          <button onclick="openAdminAccountModal(); toggleMobileNav();"
+            class="w-full px-3 py-2.5 rounded-xl bg-slate-900/60 hover:bg-slate-800 text-slate-200 flex items-center justify-between transition">
+            <span class="flex items-center gap-2.5"><i class="fa-solid fa-user-shield text-sky-400 text-sm w-4 text-center"></i> Akun Admin (<span id="nav-admin-username-mobile" class="text-sky-300">Admin</span>)</span>
+            <i class="fa-solid fa-chevron-right text-[10px] text-slate-500"></i>
+          </button>
+
           <button onclick="logoutAdmin(); toggleMobileNav();"
             class="w-full px-3 py-2.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-900/50 flex items-center justify-between transition mt-2">
-            <span class="flex items-center gap-2.5"><i class="fa-solid fa-arrow-right-from-bracket text-sm"></i> Keluar
-              / Logout Sesi</span>
+            <span class="flex items-center gap-2.5"><i class="fa-solid fa-arrow-right-from-bracket text-sm w-4 text-center"></i> Keluar / Logout Sesi</span>
             <i class="fa-solid fa-power-off text-xs text-rose-400"></i>
           </button>
         </div>
@@ -538,7 +594,7 @@
             <div class="relative w-full sm:flex-1 sm:max-w-md">
               <span class="absolute left-3 top-2.5 text-slate-500"><i
                   class="fa-solid fa-magnifying-glass text-xs"></i></span>
-              <input type="text" id="cust-search-input" onkeyup="applyCustomerFilters()"
+              <input type="text" id="cust-search-input" onkeyup="applyCustomerFilters(true)"
                 placeholder="Cari nama, user PPPoE, nomor WA..."
                 class="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-400 transition">
             </div>
@@ -547,7 +603,7 @@
             <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
               <!-- Filter Tagihan -->
               <div class="relative w-full sm:w-auto">
-                <select id="cust-filter-bill" onchange="applyCustomerFilters()"
+                <select id="cust-filter-bill" onchange="applyCustomerFilters(true)"
                   class="w-full sm:w-auto bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
                   <option value="all">Semua Tagihan</option>
                   <option value="unpaid">Belum Lunas</option>
@@ -557,7 +613,7 @@
 
               <!-- Filter Status Layanan (Aktif / Terisolir) -->
               <div class="relative w-full sm:w-auto flex items-center gap-1.5">
-                <select id="cust-filter-status" onchange="applyCustomerFilters()"
+                <select id="cust-filter-status" onchange="applyCustomerFilters(true)"
                   class="w-full sm:w-auto flex-1 bg-slate-950 border border-slate-700/80 rounded-xl px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-sky-400">
                   <option value="all">Semua Status</option>
                   <option value="active">Aktif Normal</option>
@@ -620,6 +676,23 @@
           <!-- MOBILE & TABLET VIEW: Compact Modern Card Stack (100% Anti-Geser) -->
           <div id="customer-mobile-container" class="lg:hidden p-3 sm:p-4 space-y-3">
             <div class="py-8 text-center text-slate-500 text-xs">Memuat data pelanggan...</div>
+          </div>
+
+          <!-- PAGINATION TOOLBAR (Maksimal 50 User per Halaman, Bebas Reload & Anti-Blink) -->
+          <div id="customer-pagination-container" class="hidden px-4 py-3.5 border-t border-brand-border/70 bg-slate-900/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs rounded-b-2xl">
+            <div class="text-slate-400 font-medium text-center sm:text-left flex items-center gap-1.5 flex-wrap">
+              <span>Menampilkan</span>
+              <span class="text-white font-bold" id="cust-page-start">1</span>
+              <span>-</span>
+              <span class="text-white font-bold" id="cust-page-end">50</span>
+              <span>dari</span>
+              <span class="text-sky-400 font-bold" id="cust-page-total">0</span>
+              <span>pelanggan</span>
+              <span class="text-slate-500 text-[11px]" id="cust-page-indicator">(Hal <strong class="text-slate-300" id="cust-current-page">1</strong> / <span id="cust-total-pages">1</span>)</span>
+            </div>
+            <div class="flex items-center gap-1" id="customer-pagination-buttons">
+              <!-- Dynamically populated buttons -->
+            </div>
           </div>
 
         </div>
@@ -1736,19 +1809,23 @@
       class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 hidden">
       <div
         class="bg-brand-card border border-brand-border rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl modal-enter relative overflow-hidden">
-        
+
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-4 border-b border-brand-border bg-slate-900/60 shrink-0">
           <div class="flex items-center space-x-3">
-            <div class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+            <div
+              class="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
               <i class="fa-brands fa-whatsapp text-lg"></i>
             </div>
             <div>
               <h3 class="text-sm font-bold text-white flex items-center gap-2">
                 <span>Kelola Template Pesan WhatsApp</span>
-                <span class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SQLite DB</span>
+                <span
+                  class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">SQLite
+                  DB</span>
               </h3>
-              <p class="text-xs text-slate-400">Seluruh template pesan tersimpan di database dan dapat diubah kapan saja</p>
+              <p class="text-xs text-slate-400">Seluruh template pesan tersimpan di database dan dapat diubah kapan saja
+              </p>
             </div>
           </div>
           <button onclick="closeMessageTemplatesModal()"
@@ -1758,7 +1835,8 @@
         </div>
 
         <!-- Filter & Search Toolbar -->
-        <div class="px-5 py-3 border-b border-brand-border/60 bg-slate-950/60 flex flex-wrap items-center justify-between gap-2 shrink-0">
+        <div
+          class="px-5 py-3 border-b border-brand-border/60 bg-slate-950/60 flex flex-wrap items-center justify-between gap-2 shrink-0">
           <div class="flex items-center space-x-1.5 overflow-x-auto text-xs py-0.5" id="msg-tpl-filter-btns">
             <button type="button" onclick="filterMessageTemplates('all')" id="btn-tpl-filter-all"
               class="px-3 py-1.5 rounded-lg font-bold bg-sky-600 text-white transition active:scale-95 shadow-sm">
@@ -1780,7 +1858,8 @@
 
           <div class="relative w-full sm:w-56">
             <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
-            <input type="text" id="tpl-search-input" oninput="onSearchMessageTemplates(this.value)" placeholder="Cari template..."
+            <input type="text" id="tpl-search-input" oninput="onSearchMessageTemplates(this.value)"
+              placeholder="Cari template..."
               class="w-full bg-slate-900 border border-slate-700/80 rounded-xl pl-8 pr-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 transition">
           </div>
         </div>
@@ -1793,8 +1872,11 @@
         </div>
 
         <!-- Footer -->
-        <div class="px-5 py-3 border-t border-brand-border bg-slate-900/60 flex items-center justify-between text-xs shrink-0">
-          <span class="text-slate-400 text-[11px] hidden sm:inline">💡 Tips: Klik badge variabel seperti <code class="text-emerald-400 font-mono font-bold bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-500/30">{nama}</code> untuk menyisipkan otomatis ke kursor teks.</span>
+        <div
+          class="px-5 py-3 border-t border-brand-border bg-slate-900/60 flex items-center justify-between text-xs shrink-0">
+          <span class="text-slate-400 text-[11px] hidden sm:inline">💡 Tips: Klik badge variabel seperti <code
+              class="text-emerald-400 font-mono font-bold bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-500/30">{nama}</code>
+            untuk menyisipkan otomatis ke kursor teks.</span>
           <button type="button" onclick="closeMessageTemplatesModal()"
             class="px-4 py-1.5 rounded-xl font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 transition ml-auto">
             Tutup
@@ -2031,21 +2113,6 @@
               diklik</strong>, dan bisa dibuka lewat kuota HP. Jika suatu saat Anda punya domain sendiri, cukup ketik
             nama domain Anda di atas.
           </p>
-        </div>
-
-        <!-- Toggle Simulasi QRIS Mock -->
-        <div class="p-3 bg-slate-900/60 border border-slate-800 rounded-xl flex items-center justify-between">
-          <div>
-            <label class="text-xs font-bold text-white block">Izinkan Mode Simulasi Bayar Demo</label>
-            <span class="text-[10px] text-slate-400">Tampilkan tombol simulasi instant-pay di portal user untuk
-              testing</span>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" id="settings-mock-payment-toggle" class="sr-only peer">
-            <div
-              class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-500">
-            </div>
-          </label>
         </div>
 
         <!-- Footer Buttons -->
@@ -2763,16 +2830,22 @@
       }
     }
 
-    function applyCustomerFilters() {
+    let customerCurrentPage = 1;
+    const CUSTOMER_PAGE_SIZE = 50;
+    let currentFilteredCustomers = [];
+
+    function applyCustomerFilters(resetPage = false) {
       if (!isRouterConnected) {
+        currentFilteredCustomers = [];
         renderCustomersTable([]);
+        updateCustomerPagination(0, 0, 0, 1);
         return;
       }
       const q = (document.getElementById('cust-search-input')?.value || '').toLowerCase().trim();
       const billFilter = document.getElementById('cust-filter-bill')?.value || 'all';
       const statusFilter = document.getElementById('cust-filter-status')?.value || 'all';
 
-      const filtered = rawCustomersList.filter(c => {
+      currentFilteredCustomers = rawCustomersList.filter(c => {
         // 1. Text Search Filter (Nama, Username PPPoE, Phone)
         const matchQuery = !q ||
           (c.name && c.name.toLowerCase().includes(q)) ||
@@ -2792,14 +2865,140 @@
         return matchQuery && matchBill && matchStatus;
       });
 
-      renderCustomersTable(filtered);
+      if (resetPage) {
+        customerCurrentPage = 1;
+      }
+
+      renderCurrentCustomerPage();
     }
 
     function resetCustomerFilters() {
       if (document.getElementById('cust-search-input')) document.getElementById('cust-search-input').value = '';
       if (document.getElementById('cust-filter-bill')) document.getElementById('cust-filter-bill').value = 'all';
       if (document.getElementById('cust-filter-status')) document.getElementById('cust-filter-status').value = 'all';
-      applyCustomerFilters();
+      customerCurrentPage = 1;
+      applyCustomerFilters(true);
+    }
+
+    function goToCustomerPage(page, smoothScroll = true) {
+      const totalPages = Math.max(1, Math.ceil(currentFilteredCustomers.length / CUSTOMER_PAGE_SIZE));
+      if (page < 1) page = 1;
+      if (page > totalPages) page = totalPages;
+      if (customerCurrentPage === page && !smoothScroll) return;
+      customerCurrentPage = page;
+      renderCurrentCustomerPage();
+
+      if (smoothScroll) {
+        const tableContainer = document.getElementById('customer-table-body')?.closest('.bg-brand-card');
+        if (tableContainer) {
+          tableContainer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }
+
+    function renderCurrentCustomerPage() {
+      const totalItems = currentFilteredCustomers.length;
+      const totalPages = Math.max(1, Math.ceil(totalItems / CUSTOMER_PAGE_SIZE));
+      if (customerCurrentPage > totalPages) customerCurrentPage = totalPages;
+      if (customerCurrentPage < 1) customerCurrentPage = 1;
+
+      const startIndex = (customerCurrentPage - 1) * CUSTOMER_PAGE_SIZE;
+      const endIndex = Math.min(startIndex + CUSTOMER_PAGE_SIZE, totalItems);
+      const pageSlice = currentFilteredCustomers.slice(startIndex, endIndex);
+
+      renderCustomersTable(pageSlice);
+      updateCustomerPagination(totalItems, startIndex, endIndex, totalPages);
+    }
+
+    function updateCustomerPagination(totalItems, start, end, totalPages) {
+      const container = document.getElementById('customer-pagination-container');
+      const startEl = document.getElementById('cust-page-start');
+      const endEl = document.getElementById('cust-page-end');
+      const totalEl = document.getElementById('cust-page-total');
+      const curEl = document.getElementById('cust-current-page');
+      const totPagesEl = document.getElementById('cust-total-pages');
+      const btnsContainer = document.getElementById('customer-pagination-buttons');
+
+      if (!container || !isRouterConnected || totalItems === 0) {
+        if (container) container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      if (startEl) startEl.innerText = totalItems > 0 ? (start + 1) : 0;
+      if (endEl) endEl.innerText = end;
+      if (totalEl) totalEl.innerText = totalItems;
+      if (curEl) curEl.innerText = customerCurrentPage;
+      if (totPagesEl) totPagesEl.innerText = totalPages;
+
+      if (!btnsContainer) return;
+      btnsContainer.innerHTML = '';
+
+      // Tombol Prev (<)
+      const prevBtn = document.createElement('button');
+      prevBtn.className = `w-8 h-8 rounded-lg flex items-center justify-center text-xs transition border ${
+        customerCurrentPage > 1 
+          ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 active:scale-95' 
+          : 'bg-slate-900/60 text-slate-600 border-slate-800/80 cursor-not-allowed'
+      }`;
+      prevBtn.innerHTML = '<i class="fa-solid fa-chevron-left text-[10px]"></i>';
+      prevBtn.title = 'Halaman Sebelumnya';
+      if (customerCurrentPage > 1) {
+        prevBtn.onclick = () => goToCustomerPage(customerCurrentPage - 1);
+      } else {
+        prevBtn.disabled = true;
+      }
+      btnsContainer.appendChild(prevBtn);
+
+      // Angka Halaman Smart Pagination (Ellipsis)
+      let pages = [];
+      if (totalPages <= 7) {
+        for (let i = 1; i <= totalPages; i++) pages.push(i);
+      } else {
+        if (customerCurrentPage <= 4) {
+          pages = [1, 2, 3, 4, 5, '...', totalPages];
+        } else if (customerCurrentPage >= totalPages - 3) {
+          pages = [1, '...', totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages];
+        } else {
+          pages = [1, '...', customerCurrentPage - 1, customerCurrentPage, customerCurrentPage + 1, '...', totalPages];
+        }
+      }
+
+      pages.forEach(p => {
+        if (p === '...') {
+          const dots = document.createElement('span');
+          dots.className = 'w-7 h-8 flex items-center justify-center text-slate-600 font-bold text-xs select-none';
+          dots.innerText = '…';
+          btnsContainer.appendChild(dots);
+        } else {
+          const pageBtn = document.createElement('button');
+          const isActive = (p === customerCurrentPage);
+          pageBtn.className = `min-w-[32px] h-8 px-2 rounded-lg text-xs font-semibold flex items-center justify-center transition border ${
+            isActive
+              ? 'bg-sky-600 text-white border-sky-500 shadow-md shadow-sky-600/30'
+              : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300 border-slate-700/80 active:scale-95'
+          }`;
+          pageBtn.innerText = p;
+          pageBtn.onclick = () => goToCustomerPage(p);
+          btnsContainer.appendChild(pageBtn);
+        }
+      });
+
+      // Tombol Next (>)
+      const nextBtn = document.createElement('button');
+      nextBtn.className = `w-8 h-8 rounded-lg flex items-center justify-center text-xs transition border ${
+        customerCurrentPage < totalPages 
+          ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 active:scale-95' 
+          : 'bg-slate-900/60 text-slate-600 border-slate-800/80 cursor-not-allowed'
+      }`;
+      nextBtn.innerHTML = '<i class="fa-solid fa-chevron-right text-[10px]"></i>';
+      nextBtn.title = 'Halaman Berikutnya';
+      if (customerCurrentPage < totalPages) {
+        nextBtn.onclick = () => goToCustomerPage(customerCurrentPage + 1);
+      } else {
+        nextBtn.disabled = true;
+      }
+      btnsContainer.appendChild(nextBtn);
     }
 
     function renderCustomersTable(customers) {
@@ -2844,12 +3043,14 @@
             </button>
           </div>
         `;
+        document.getElementById('customer-pagination-container')?.classList.add('hidden');
         return;
       }
 
       if (customers.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="py-12 text-center text-slate-500 font-medium">Tidak ada pelanggan yang cocok dengan filter atau pencarian.</td></tr>';
         mobileContainer.innerHTML = '<div class="py-10 text-center text-slate-500 text-xs">Tidak ada pelanggan yang cocok dengan filter.</div>';
+        document.getElementById('customer-pagination-container')?.classList.add('hidden');
         return;
       }
 
@@ -3940,7 +4141,7 @@ _LenxyNet Fiber_`
         filtered = filtered.filter(t => t.category === currentTplCategoryFilter);
       }
       if (currentTplSearchQuery) {
-        filtered = filtered.filter(t => 
+        filtered = filtered.filter(t =>
           (t.title && t.title.toLowerCase().includes(currentTplSearchQuery)) ||
           (t.id && t.id.toLowerCase().includes(currentTplSearchQuery)) ||
           (t.content && t.content.toLowerCase().includes(currentTplSearchQuery))
@@ -4120,6 +4321,7 @@ _LenxyNet Fiber_`
       const loginScreen = document.getElementById('admin-login-screen');
       const dashboardView = document.getElementById('admin-dashboard-view');
       const navUsername = document.getElementById('nav-admin-username');
+      const navUsernameMenu = document.getElementById('nav-admin-username-menu');
       const navUsernameMobile = document.getElementById('nav-admin-username-mobile');
 
       if (auth) {
@@ -4129,6 +4331,7 @@ _LenxyNet Fiber_`
           dashboardView.classList.remove('hidden');
           const uName = authData.username || 'Admin';
           if (navUsername) navUsername.innerText = uName;
+          if (navUsernameMenu) navUsernameMenu.innerText = uName;
           if (navUsernameMobile) navUsernameMobile.innerText = uName;
         } catch (e) {
           sessionStorage.removeItem('lenxynet_admin_auth');
@@ -4140,6 +4343,51 @@ _LenxyNet Fiber_`
         dashboardView.classList.add('hidden');
       }
     }
+
+    // Toggle Desktop Navigation Dropdowns (Pengaturan & Admin)
+    function toggleNavDropdown(type) {
+      const settingsMenu = document.getElementById('nav-settings-menu');
+      const adminMenu = document.getElementById('nav-admin-menu');
+      const chevronSettings = document.getElementById('chevron-settings');
+      const chevronAdmin = document.getElementById('chevron-admin');
+
+      if (type === 'settings') {
+        const isClosed = settingsMenu.classList.contains('hidden');
+        closeNavDropdowns();
+        if (isClosed) {
+          settingsMenu.classList.remove('hidden');
+          if (chevronSettings) chevronSettings.classList.add('rotate-180');
+        }
+      } else if (type === 'admin') {
+        const isClosed = adminMenu.classList.contains('hidden');
+        closeNavDropdowns();
+        if (isClosed) {
+          adminMenu.classList.remove('hidden');
+          if (chevronAdmin) chevronAdmin.classList.add('rotate-180');
+        }
+      }
+    }
+
+    function closeNavDropdowns() {
+      const settingsMenu = document.getElementById('nav-settings-menu');
+      const adminMenu = document.getElementById('nav-admin-menu');
+      const chevronSettings = document.getElementById('chevron-settings');
+      const chevronAdmin = document.getElementById('chevron-admin');
+
+      if (settingsMenu) settingsMenu.classList.add('hidden');
+      if (adminMenu) adminMenu.classList.add('hidden');
+      if (chevronSettings) chevronSettings.classList.remove('rotate-180');
+      if (chevronAdmin) chevronAdmin.classList.remove('rotate-180');
+    }
+
+    // Click outside to close desktop dropdowns
+    document.addEventListener('click', (e) => {
+      const settingsWrap = document.getElementById('nav-settings-dropdown-wrapper');
+      const adminWrap = document.getElementById('nav-admin-dropdown-wrapper');
+      if (settingsWrap && !settingsWrap.contains(e.target) && adminWrap && !adminWrap.contains(e.target)) {
+        closeNavDropdowns();
+      }
+    });
 
     // Toggle Mobile Drawer Navigation
     function toggleMobileNav() {
@@ -4821,7 +5069,6 @@ _LenxyNet Fiber_`
         }
         document.getElementById('settings-admin-wa').value = data.adminWaNumber || '';
         document.getElementById('settings-public-portal-url').value = data.publicPortalUrl || '';
-        document.getElementById('settings-mock-payment-toggle').checked = data.mockPaymentEnabled;
       } catch (e) {
         console.error('Failed to load QRIS settings:', e);
       }
@@ -4854,7 +5101,6 @@ _LenxyNet Fiber_`
     async function saveQrisSettings() {
       const adminWa = document.getElementById('settings-admin-wa').value.trim();
       const publicUrl = document.getElementById('settings-public-portal-url').value.trim();
-      const mockEnabled = document.getElementById('settings-mock-payment-toggle').checked;
 
       const btn = document.getElementById('btn-save-qris-settings');
       const origHtml = btn.innerHTML;
@@ -4865,7 +5111,7 @@ _LenxyNet Fiber_`
         const payload = {
           admin_wa_number: adminWa,
           public_portal_url: publicUrl,
-          mock_payment_enabled: mockEnabled
+          mock_payment_enabled: false
         };
         if (selectedQrisBase64) {
           payload.qris_image_data = selectedQrisBase64;

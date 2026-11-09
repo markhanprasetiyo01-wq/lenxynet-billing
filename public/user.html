@@ -386,14 +386,6 @@
             <i class="fa-solid fa-paper-plane"></i> Kirim Bukti Pembayaran
           </button>
         </div>
-
-        <!-- Optional Simulation Mock QRIS Button (Jika diizinkan) -->
-        <div id="mock-simulation-container" class="hidden pt-2 border-t border-slate-800/80">
-          <button onclick="simulatePayQRIS()" id="btn-pay"
-            class="w-full py-2 bg-slate-900/80 hover:bg-slate-800 text-slate-400 hover:text-amber-300 border border-slate-800 rounded-xl text-[11px] font-semibold transition flex items-center justify-center gap-1.5 active:scale-98">
-            <i class="fa-solid fa-flask text-amber-400"></i> Simulasi Bayar Instan (Mode Demo / Uji Coba)
-          </button>
-        </div>
       </div>
 
       <!-- User Payment History Section -->
@@ -746,13 +738,6 @@
         const paidSuccess = document.getElementById('paid-success');
         const pendingBox = document.getElementById('pending-verification-box');
         const rejectedWarning = document.getElementById('rejected-warning');
-        const mockContainer = document.getElementById('mock-simulation-container');
-
-        if (data.mockPaymentEnabled) {
-          mockContainer.classList.remove('hidden');
-        } else {
-          mockContainer.classList.add('hidden');
-        }
 
         if (data.qrisImage) {
           document.getElementById('user-qris-image').src = data.qrisImage;
@@ -881,43 +866,6 @@
         });
       } catch (e) {
         container.innerHTML = '<div class="py-4 text-center text-rose-400 text-[11px]">Gagal memuat riwayat</div>';
-      }
-    }
-
-    async function simulatePayQRIS() {
-      if (!currentBillId) return;
-      const durationSelect = document.getElementById('user-duration-select');
-      const durationMonths = parseInt(durationSelect ? durationSelect.value : '1', 10);
-
-      const btn = document.getElementById('btn-pay');
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses QRIS...';
-      btn.disabled = true;
-
-      try {
-        const res = await fetch('/api/user/pay-qris', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bill_id: currentBillId, durationMonths })
-        });
-
-        const data = await res.json();
-        if (res.ok) {
-          showToast('Pembayaran QRIS Berhasil! Layanan aktif otomatis.', 'success');
-          const targetUser = currentActiveIdentifier || localStorage.getItem('lenxynet_auth_user') || sessionStorage.getItem('lenxynet_auth_user') || new URLSearchParams(window.location.search).get('phone') || new URLSearchParams(window.location.search).get('id');
-          if (targetUser) {
-            loadUserData(targetUser);
-          } else {
-            location.reload();
-          }
-        } else {
-          showToast('Gagal memproses pembayaran', 'error');
-          btn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Simulasi Bayar QRIS Sekarang';
-          btn.disabled = false;
-        }
-      } catch (e) {
-        showToast('Terjadi kesalahan koneksi', 'error');
-        btn.innerHTML = '<i class="fa-solid fa-qrcode"></i> Simulasi Bayar QRIS Sekarang';
-        btn.disabled = false;
       }
     }
 
