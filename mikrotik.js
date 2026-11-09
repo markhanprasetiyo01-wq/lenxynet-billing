@@ -303,19 +303,21 @@ async function syncFromMikrotik() {
       const currentDay = now.getDate();
       const currentPeriod = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
 
-      // Cek apakah pelanggan sudah lewat tanggal jatuh tempo + masa toleransi
+      // Cek apakah pelanggan nunggak bulan lalu atau sudah lewat jatuh tempo bulan ini + masa toleransi
       let isCustomerOverdue = false;
       if (dueDate) {
         const toleranceDays = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'tolerance_days'").get()?.value || '1', 10);
-        const calcYear = fullDueYear || currentYear;
-        const calcMonth = fullDueMonth || currentMonth;
-        const daysInMonth = new Date(calcYear, calcMonth, 0).getDate();
+        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
         const effectiveDueDate = Math.min(dueDate, daysInMonth);
-        const dueDateTime = new Date(calcYear, calcMonth - 1, effectiveDueDate);
+        const dueDateTime = new Date(currentYear, currentMonth - 1, effectiveDueDate);
         const deadlineTime = new Date(dueDateTime);
         deadlineTime.setDate(deadlineTime.getDate() + toleranceDays);
         const todayTime = new Date(currentYear, currentMonth - 1, currentDay);
-        isCustomerOverdue = todayTime.getTime() > deadlineTime.getTime();
+
+        // Cek apakah ada tunggakan tagihan dari bulan-bulan sebelumnya
+        const unpaidOldBill = db.prepare("SELECT id FROM bills WHERE customer_id = ? AND period < ? AND status = 'unpaid' LIMIT 1").get(customer.id, currentPeriod);
+
+        isCustomerOverdue = Boolean(unpaidOldBill) || (todayTime.getTime() > deadlineTime.getTime());
       }
 
       let bill = db.prepare('SELECT id, status FROM bills WHERE customer_id = ? AND period = ?').get(customer.id, currentPeriod);

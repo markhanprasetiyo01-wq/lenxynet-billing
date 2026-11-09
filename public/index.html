@@ -513,17 +513,12 @@
               <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5">Sinkronisasi langsung dengan RouterOS API</p>
             </div>
 
-            <!-- Table Action Controls (Responsive: 2x2 grid on mobile, row on desktop) -->
+            <!-- Table Action Controls (Responsive: grid on mobile, row on desktop) -->
             <div class="grid grid-cols-2 sm:flex sm:items-center gap-2 w-full sm:w-auto">
               <button onclick="openGlobalWAModal('all')"
                 class="w-full sm:w-auto px-3 sm:px-3.5 py-2 bg-emerald-600/15 hover:bg-emerald-600/25 text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95"
                 title="Kirim WhatsApp Broadcast / Global">
                 <i class="fa-brands fa-whatsapp text-sm text-emerald-400 shrink-0"></i> <span>WA Global</span>
-              </button>
-              <button id="btn-autoisolir" onclick="triggerAutoIsolir()"
-                class="w-full sm:w-auto px-3 sm:px-3.5 py-2 bg-rose-600/15 hover:bg-rose-600/25 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95"
-                title="Jalankan pengecekan jatuh tempo dan isolir pelanggan yang telat">
-                <i class="fa-solid fa-bolt text-[11px] shrink-0" id="isolir-icon"></i> <span>Cek Isolir</span>
               </button>
               <button id="btn-sync" onclick="syncWithMikrotik()"
                 class="w-full sm:w-auto px-3 sm:px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700/80 rounded-xl text-xs font-semibold transition flex items-center justify-center gap-1.5 active:scale-95">
@@ -3069,8 +3064,8 @@
       }
       const btn = document.getElementById('btn-autoisolir');
       const icon = document.getElementById('isolir-icon');
-      icon.classList.add('fa-spin');
-      btn.disabled = true;
+      if (icon) icon.classList.add('fa-spin');
+      if (btn) btn.disabled = true;
 
       try {
         const res = await fetch('/api/admin/trigger-autoisolir', { method: 'POST' });
@@ -3085,8 +3080,8 @@
       } catch (e) {
         showToast('Gagal menjalankan Auto-Isolir', 'error');
       } finally {
-        icon.classList.remove('fa-spin');
-        btn.disabled = false;
+        if (icon) icon.classList.remove('fa-spin');
+        if (btn) btn.disabled = false;
       }
     }
 

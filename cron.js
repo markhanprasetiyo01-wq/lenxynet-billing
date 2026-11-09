@@ -65,23 +65,10 @@ async function runAutoIsolirCheck(baseUrl) {
       continue;
     }
 
-    // Periksa apakah ada tanggal spesifik lengkap di comment pelanggan (misal: 09-10-2026)
-    let fullDueYear = null;
-    let fullDueMonth = null;
-    if (c.comment && String(c.comment).trim() !== '') {
-      const fullDateMatch = String(c.comment).trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-      if (fullDateMatch) {
-        fullDueMonth = parseInt(fullDateMatch[2], 10);
-        fullDueYear = parseInt(fullDateMatch[3], 10);
-      }
-    }
+    const effectiveDueDate = getEffectiveDueDate(currentYear, currentMonth, configuredDueDate);
 
-    const calcYear = fullDueYear || currentYear;
-    const calcMonth = fullDueMonth || currentMonth;
-    const effectiveDueDate = getEffectiveDueDate(calcYear, calcMonth, configuredDueDate);
-
-    // Tanggal jatuh tempo & deadline toleransi isolir
-    const dueDateTime = new Date(calcYear, calcMonth - 1, effectiveDueDate);
+    // Tanggal jatuh tempo & deadline toleransi isolir bulan berjalan
+    const dueDateTime = new Date(currentYear, currentMonth - 1, effectiveDueDate);
     const deadlineTime = new Date(dueDateTime);
     deadlineTime.setDate(deadlineTime.getDate() + toleranceDays);
 
@@ -95,7 +82,11 @@ async function runAutoIsolirCheck(baseUrl) {
 
     const isHMinus3 = todayTime.getTime() === hMinus3Time.getTime();
     const isHPlus1 = todayTime.getTime() === hPlus1Time.getTime();
-    const isOverdue = todayTime.getTime() > deadlineTime.getTime();
+
+    // Cek apakah ada tunggakan tagihan dari bulan-bulan sebelumnya
+    const unpaidOldBill = db.prepare("SELECT id FROM bills WHERE customer_id = ? AND period < ? AND status = 'unpaid' LIMIT 1").get(c.id, currentPeriod);
+
+    const isOverdue = Boolean(unpaidOldBill) || (todayTime.getTime() > deadlineTime.getTime());
     const deadlineFormatted = `${deadlineTime.getDate()}/${deadlineTime.getMonth() + 1}/${deadlineTime.getFullYear()}`;
     const phoneParam = (c.phone && c.phone !== '-') ? c.phone : c.pppoe_username;
     const portalUrl = `${baseUrl}/user.html?phone=${encodeURIComponent(phoneParam)}`;
