@@ -152,13 +152,13 @@ async function sendNotificationToAdmin(text) {
 
 // Template 1: Reminder H-3 Sebelum Jatuh Tempo
 async function sendReminderHMinus3(customer, bill, portalUrl) {
-  const message = `Halo *${customer.name}*,
+  const message = `Halo Bapak/Ibu *${customer.name}*,
 
 Pemberitahuan dari *LenxyNet Fiber*.
 Tagihan internet bulanan Anda akan jatuh tempo dalam *3 hari lagi*:
 
 📄 *Detail Tagihan:*
-• Nama Pelanggan: *${customer.name}*
+• Nama Pelanggan: *Bapak/Ibu ${customer.name}*
 • Paket: *${customer.plan_name || 'Internet PPPoE'}*
 • Jatuh Tempo: *Tgl ${customer.due_date}*
 • Total Tagihan: *Rp ${Number(bill.amount).toLocaleString('id-ID')}*
@@ -177,7 +177,7 @@ _Customer Service LenxyNet_`;
 // Template 2: Reminder H+1 Setelah Jatuh Tempo (Keterlambatan & Peringatan Isolir)
 async function sendReminderHPlus1(customer, bill, toleranceDays, portalUrl) {
   const message = `PEMBERITAHUAN KETERLAMBATAN
-Kepada Yth. *${customer.name}*,
+Kepada Yth. Bapak/Ibu *${customer.name}*,
 
 Tagihan internet *LenxyNet* Anda telah melewati tanggal jatuh tempo (Tgl ${customer.due_date}).
 
@@ -205,7 +205,7 @@ async function sendPaymentSuccessNotice(customer, bill) {
     : bill.period;
 
   const message = `PEMBAYARAN BERHASIL & DITERIMA ✅
-Halo *${customer.name}*,
+Halo Bapak/Ibu *${customer.name}*,
 
 Terima kasih! Pembayaran tagihan internet *LenxyNet* Anda telah kami terima:
 
@@ -228,7 +228,7 @@ _Salam hangat, Tim LenxyNet Fiber_`;
 async function sendPromoNotice(customer, customMessage, plansList, portalUrl) {
   let message = customMessage;
   if (!message) {
-    message = `Halo *{name}*, dapatkan promo internet terbaik di {portal_url}!`;
+    message = `Halo Bapak/Ibu *{name}*, dapatkan promo internet terbaik di {portal_url}!`;
   }
 
   // Replace variable placeholders

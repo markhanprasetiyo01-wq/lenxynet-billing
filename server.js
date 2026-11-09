@@ -1579,7 +1579,7 @@ app.post('/api/user/request-otp', async (req, res) => {
 
     // 4. Kirim pesan OTP via Bot WhatsApp
     const otpMessage = `*KODE VERIFIKASI LENXYNET* 🔐
-Halo *${cust.name}*,
+Halo Bapak/Ibu *${cust.name}*,
 
 Kode OTP untuk masuk ke Portal Pelanggan Anda adalah:
 👉 *${otp}*
@@ -2291,7 +2291,7 @@ app.post('/api/admin/payments/:id/reject', requireAdminAuth, requireMikrotikConn
         const baseUrl = getPortalBaseUrl(req);
         const phoneParam = (bill.customer_phone && bill.customer_phone !== '-') ? bill.customer_phone : bill.pppoe_username;
         const portalUrl = `${baseUrl}/user.html?phone=${encodeURIComponent(phoneParam)}`;
-        const rejectMsg = `Halo *${bill.customer_name}*,\n\n` +
+        const rejectMsg = `Halo Bapak/Ibu *${bill.customer_name}*,\n\n` +
           `Pemberitahuan dari *LenxyNet Fiber*.\n` +
           `Mohon maaf, bukti pembayaran yang Anda unggah untuk periode *${bill.period}* sebesar *Rp ${bill.amount.toLocaleString('id-ID')}* belum dapat disetujui.\n\n` +
           `❌ *Alasan Penolakan:* ${rejectReason}\n\n` +
