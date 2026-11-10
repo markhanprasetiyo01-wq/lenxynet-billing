@@ -22,10 +22,10 @@
 
       <!-- Quick Action Buttons -->
       <div class="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-        <a href="/data_pelanggan_excel.csv" download
+        <button onclick="downloadProtectedExcel()"
           class="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-semibold transition flex items-center gap-1.5">
           <i class="fa-solid fa-file-excel text-emerald-400"></i> Unduh Excel (.csv)
-        </a>
+        </button>
         <button onclick="exportUpdatedRsc()"
           class="px-3.5 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-md shadow-sky-600/20 transition flex items-center gap-1.5">
           <i class="fa-solid fa-code"></i> Buat Script Winbox (.rsc)
@@ -84,6 +84,27 @@
 
   </div>
 
+  <!-- Modal Login Admin untuk Akses Editor Data Pelanggan -->
+  <div id="editorLoginModal" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 flex items-center justify-center p-4 hidden">
+    <form onsubmit="submitEditorLogin(event)" class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl">
+      <div class="text-center space-y-1">
+        <div class="w-12 h-12 mx-auto rounded-2xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 text-xl mb-2">
+          <i class="fa-solid fa-shield-halved"></i>
+        </div>
+        <h2 class="text-base font-bold text-white">Autentikasi Admin Diperlukan</h2>
+        <p class="text-xs text-slate-400">Data pelanggan dilindungi dari akses publik. Silakan login Admin terlebih dahulu.</p>
+      </div>
+      <div id="editorLoginError" class="hidden p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs text-center"></div>
+      <div class="space-y-3">
+        <input type="text" id="ed-user" required placeholder="Username Admin" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-sky-400">
+        <input type="password" id="ed-pass" required placeholder="Password Admin" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-sky-400">
+      </div>
+      <button type="submit" id="btnEdLogin" class="w-full py-2.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition">
+        Masuk & Buka Editor
+      </button>
+    </form>
+  </div>
+
   <!-- Modal Script Winbox Result -->
   <div id="rscModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-5 space-y-3 shadow-2xl">
@@ -108,9 +129,70 @@
   <script>
     let rawCustomers = [];
 
-    async function loadCsvData() {
+    function getAdminToken() {
       try {
-        const res = await fetch('/data_pelanggan_pppoe.csv?t=' + Date.now(), { cache: 'no-store' });
+        const s = sessionStorage.getItem('lenxynet_admin_auth') || localStorage.getItem('lenxynet_editor_auth');
+        if (s) return JSON.parse(s).token || '';
+      } catch (e) {}
+      return '';
+    }
+
+    async function submitEditorLogin(e) {
+      e.preventDefault();
+      const username = document.getElementById('ed-user').value.trim();
+      const password = document.getElementById('ed-pass').value;
+      const errBox = document.getElementById('editorLoginError');
+      const btn = document.getElementById('btnEdLogin');
+      errBox.classList.add('hidden');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          localStorage.setItem('lenxynet_editor_auth', JSON.stringify({ token: data.token }));
+          document.getElementById('editorLoginModal').classList.add('hidden');
+          loadCsvData();
+        } else {
+          errBox.innerText = data.error || 'Login gagal!';
+          errBox.classList.remove('hidden');
+        }
+      } catch (err) {
+        errBox.innerText = 'Gagal menghubungi server';
+        errBox.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function downloadProtectedExcel() {
+      const token = getAdminToken();
+      if (!token) {
+        document.getElementById('editorLoginModal').classList.remove('hidden');
+        return;
+      }
+      window.location.href = `/api/admin/editor-excel?token=${encodeURIComponent(token)}`;
+    }
+
+    async function loadCsvData() {
+      const token = getAdminToken();
+      if (!token) {
+        document.getElementById('editorLoginModal').classList.remove('hidden');
+        return;
+      }
+      try {
+        const res = await fetch('/api/admin/editor-csv?t=' + Date.now(), {
+          cache: 'no-store',
+          headers: { 'Authorization': 'Bearer ' + token }
+        });
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem('lenxynet_editor_auth');
+          document.getElementById('editorLoginModal').classList.remove('hidden');
+          return;
+        }
         const text = await res.text();
         const lines = text.trim().split('\n');
         

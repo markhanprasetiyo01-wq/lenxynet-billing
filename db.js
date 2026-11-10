@@ -4,6 +4,14 @@ const path = require('path');
 const dbPath = path.join(__dirname, 'database.sqlite');
 const db = new DatabaseSync(dbPath);
 
+// Optimasi & Proteksi SQLite untuk Server 24/7 (STB HG680P eMMC & Anti-Korup Mati Lampu)
+db.exec(`
+  PRAGMA journal_mode = WAL;
+  PRAGMA synchronous = NORMAL;
+  PRAGMA foreign_keys = ON;
+  PRAGMA busy_timeout = 5000;
+`);
+
 // Initialize Tables
 db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
@@ -98,8 +106,26 @@ try {
   db.exec("ALTER TABLE bills ADD COLUMN rejection_reason TEXT;");
 } catch (e) {}
 try {
+  db.exec("ALTER TABLE bills ADD COLUMN duration_months INTEGER DEFAULT 1;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE bills ADD COLUMN last_hminus3_sent TEXT;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE bills ADD COLUMN last_hplus1_sent TEXT;");
+} catch (e) {}
+try {
   db.exec("ALTER TABLE customers ADD COLUMN comment TEXT;");
 } catch (e) {}
+
+// Index untuk performa jangka panjang (ribuan pelanggan & transaksi bertahun-tahun)
+db.exec(`
+  CREATE INDEX IF NOT EXISTS idx_bills_customer_period ON bills(customer_id, period);
+  CREATE INDEX IF NOT EXISTS idx_bills_status ON bills(status);
+  CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
+  CREATE INDEX IF NOT EXISTS idx_customers_status ON customers(status);
+  CREATE INDEX IF NOT EXISTS idx_activity_logs_created ON activity_logs(created_at);
+`);
 
 // Seed default settings if empty
 const checkSetting = db.prepare('SELECT value FROM settings WHERE key = ?');
@@ -133,7 +159,9 @@ if (!checkSetting.get('wa_status')) {
   insertSetting.run('wa_status', 'disconnected');
 }
 if (!checkSetting.get('mock_payment_enabled')) {
-  insertSetting.run('mock_payment_enabled', 'true');
+  insertSetting.run('mock_payment_enabled', 'false');
+} else {
+  db.prepare("UPDATE settings SET value = 'false' WHERE key = 'mock_payment_enabled'").run();
 }
 if (!checkSetting.get('qris_image')) {
   insertSetting.run('qris_image', '/uploads/qris/default-qris.png');

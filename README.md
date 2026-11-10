@@ -120,26 +120,35 @@ STB **Fiberhome HG680P** (RAM 2 GB, SoC Amlogic S905X) adalah pilihan terbaik un
 
 ---
 
-### E. Instalasi Node.js & Dependency di Armbian Linux
+### E. Instalasi Node.js 22+ & Konfigurasi STB Armbian Linux
+> [!IMPORTANT]
+> Aplikasi ini menggunakan modul bawaan `node:sqlite` sehingga **WAJIB memakai Node.js v22.13+ / v24 LTS** (JANGAN pakai Node v20).
+
 Jalankan rentetan perintah berikut di terminal SSH STB:
 
 ```bash
-# 1. Update paket sistem Linux
+# 1. Set Zona Waktu Indonesia (WIB) agar jadwal Cron Job & Log akurat
+timedatectl set-timezone Asia/Jakarta
+
+# 2. Update paket sistem Linux
 apt update && apt upgrade -y
 
-# 2. Pasang Git, Curl, dan Build Tools
+# 3. Pasang Git, Curl, dan Build Tools
 apt install -y git curl wget build-essential
 
-# 3. Pasang Node.js LTS (Versi 20 / 22 ARM64)
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+# 4. Pasang Node.js v22 LTS (ARM64 - Wajib v22+ untuk node:sqlite)
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
 apt install -y nodejs
 
-# 4. Verifikasi instalasi Node.js
+# 5. Verifikasi instalasi Node.js (Pastikan muncul v22.x.x atau lebih baru)
 node -v
 npm -v
 
-# 5. Pasang PM2 (Process Manager agar aplikasi auto-restart & auto-start saat mati lampu)
+# 6. Pasang PM2 + Auto-Rotate Log (Mencegah file log memenuhi eMMC STB)
 npm install -g pm2
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 5
 ```
 
 ---
@@ -156,15 +165,16 @@ npm install -g pm2
 
 2. **Pasang Library Dependensi:**
    ```bash
-   npm install
+   npm install --no-audit --no-fund
    ```
 
-3. **Salin Database SQLite Lama:**
-   - Salin file `database.sqlite` dari PC ke STB menggunakan aplikasi **WinSCP** (port 22) ke direktori `/var/www/lenxynet/database.sqlite`.
+3. **Salin Database SQLite Lama (Disarankan via Download Backup di Dashboard Admin):**
+   - Klik **Download Backup DB** dari Dashboard Admin lama (atau ambil snapshot terbaru dari Telegram Backup), lalu upload ke `/var/www/lenxynet/database.sqlite` via **WinSCP**.
+   - *(Jika menyalin manual langsung dari folder PC lama saat server aktif, hentikan dulu `server.js` di PC atau salin bersama `database.sqlite-wal` dan `database.sqlite-shm` agar transaksi terakhir tidak hilang).*
 
-4. **Jalankan Aplikasi dengan PM2:**
+4. **Jalankan Aplikasi dengan PM2 (Dengan Batas Memori Aman STB 2GB RAM):**
    ```bash
-   pm2 start server.js --name "lenxynet"
+   pm2 start server.js --name "lenxynet" --max-memory-restart 500M --node-args="--max-old-space-size=512"
    ```
 
 5. **Kunci Auto-Start Saat STB Menyala / Setelah Mati Lampu:**

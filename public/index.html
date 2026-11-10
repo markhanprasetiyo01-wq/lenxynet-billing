@@ -4544,6 +4544,7 @@ _LenxyNet Fiber_`
           loadStats();
           loadPlans();
           loadCustomers();
+          checkWAStatus();
         } else {
           const errMsg = data.error || 'Username atau Password Admin salah!';
           if (errorBox && errorText) {
@@ -5051,6 +5052,7 @@ _LenxyNet Fiber_`
           </td>
           <td class="py-3 px-4 font-mono font-bold text-emerald-400 text-sm">
             Rp ${Number(p.amount).toLocaleString('id-ID')}
+            ${(p.duration_months && p.duration_months > 1) ? `<div class="mt-0.5"><span class="px-1.5 py-0.2 rounded text-[10px] font-sans font-bold bg-sky-500/20 text-sky-300 border border-sky-500/30">${p.duration_months} Bulan Sekaligus</span></div>` : ''}
           </td>
           <td class="py-3 px-4 text-center">
             <div class="inline-block relative cursor-pointer group/img" onclick="openProofZoom('${proofImg}', '${safeName} (Rp ${Number(p.amount).toLocaleString('id-ID')})')">
@@ -5798,17 +5800,24 @@ _LenxyNet Fiber_`
       editPhone(id, currentPhone);
     }
 
-    // Initial Load & Auth Check
+    // Initial Load & Auth Check (Hanya panggil API admin bila sudah login!)
     checkAdminAuth();
-    loadStats();
-    loadPlans();
-    loadCustomers();
-    checkWAStatus();
-    // Polling status WA berkala di navbar setiap 15 detik
-    setInterval(checkWAStatus, 15000);
-
-    // Auto-refresh data pelanggan, statistik & antrean verifikasi setiap 8 detik agar selalu sinkron dengan MikroTik/Winbox
+    if (sessionStorage.getItem('lenxynet_admin_auth')) {
+      loadStats();
+      loadPlans();
+      loadCustomers();
+      checkWAStatus();
+    }
+    // Polling status WA berkala di navbar setiap 15 detik (saat sudah login & tab aktif)
     setInterval(() => {
+      if (sessionStorage.getItem('lenxynet_admin_auth') && !document.hidden) {
+        checkWAStatus();
+      }
+    }, 15000);
+
+    // Auto-refresh data pelanggan, statistik & antrean verifikasi setiap 10 detik agar selalu sinkron dengan MikroTik/Winbox
+    setInterval(() => {
+      if (!sessionStorage.getItem('lenxynet_admin_auth') || document.hidden) return;
       // Hanya auto-refresh jika user tidak sedang mengetik atau membuka modal
       const isAnyModalOpen = document.querySelector('#addModal:not(.hidden), #editCustomerModal:not(.hidden), #dueDateModal:not(.hidden), #routerSettingsModal:not(.hidden), #promptModal:not(.hidden), #rejectPaymentModal:not(.hidden), #qrisSettingsModal:not(.hidden), #proofZoomModal:not(.hidden), #manualBillModal:not(.hidden), #dataConflictModal:not(.hidden), #telegramSettingsModal:not(.hidden)');
       if (!isAnyModalOpen) {
@@ -5819,7 +5828,7 @@ _LenxyNet Fiber_`
         }
         loadStats();
       }
-    }, 8000);
+    }, 10000);
   </script>
 </body>
 

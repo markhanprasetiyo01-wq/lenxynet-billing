@@ -13,16 +13,44 @@ if (!fs.existsSync(AUTH_DIR)) {
 let sock = null;
 let currentQR = null;
 let connectionStatus = 'disconnected'; // 'disconnected', 'connecting', 'connected'
+let isInitializing = false;
+let reconnectTimer = null;
+
+function scheduleReconnect(delayMs) {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    initWhatsApp();
+  }, delayMs);
+}
 
 async function initWhatsApp() {
+  if (isInitializing) return;
+  isInitializing = true;
+
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
   try {
+    if (sock) {
+      try { sock.ev.removeAllListeners(); } catch (e) {}
+      try { sock.end(); } catch (e) {}
+      sock = null;
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
 
     sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
       logger: pino({ level: 'silent' }),
-      browser: ['LenxyNet Billing', 'Chrome', '1.0.0']
+      browser: ['LenxyNet Billing', 'Chrome', '1.0.0'],
+      connectTimeoutMs: 30000
     });
 
     sock.ev.on('creds.update', saveCreds);
@@ -31,9 +59,11 @@ async function initWhatsApp() {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        currentQR = await QRCode.toDataURL(qr);
+        try {
+          currentQR = await QRCode.toDataURL(qr);
+        } catch (e) {}
         connectionStatus = 'connecting';
-        db.prepare("UPDATE settings SET value = 'connecting' WHERE key = 'wa_status'").run();
+        try { db.prepare("UPDATE settings SET value = 'connecting' WHERE key = 'wa_status'").run(); } catch (e) {}
         console.log('[WhatsApp] QR Code siap untuk di-scan!');
       }
 
@@ -43,32 +73,36 @@ async function initWhatsApp() {
         const isLoggedOut = statusCode === DisconnectReason.loggedOut;
         const shouldReconnect = !isLoggedOut && !isReplaced;
         console.log(`[WhatsApp] Koneksi terputus. Kode status: ${statusCode}. Reconnect: ${shouldReconnect}`);
-        
+
         connectionStatus = 'disconnected';
         currentQR = null;
-        db.prepare("UPDATE settings SET value = 'disconnected' WHERE key = 'wa_status'").run();
+        try { db.prepare("UPDATE settings SET value = 'disconnected' WHERE key = 'wa_status'").run(); } catch (e) {}
 
         if (isReplaced) {
           console.log('[WhatsApp] Sesi digantikan oleh perangkat lain (kode 440 / connection replaced). Auto-reconnect dijeda.');
         } else if (shouldReconnect) {
-          setTimeout(initWhatsApp, 5000);
+          scheduleReconnect(5000);
         } else {
           // Logged out: bersihkan folder sesi
           try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
-          } catch(e) {}
-          setTimeout(initWhatsApp, 3000);
+            fs.mkdirSync(AUTH_DIR, { recursive: true });
+          } catch (e) {}
+          scheduleReconnect(3000);
         }
       } else if (connection === 'open') {
         console.log('✅ [WhatsApp] Bot Baileys berhasil TERHUBUNG!');
         connectionStatus = 'connected';
         currentQR = null;
-        db.prepare("UPDATE settings SET value = 'connected' WHERE key = 'wa_status'").run();
+        try { db.prepare("UPDATE settings SET value = 'connected' WHERE key = 'wa_status'").run(); } catch (e) {}
       }
     });
 
   } catch (err) {
     console.error('[WhatsApp] Init error:', err.message);
+    scheduleReconnect(10000);
+  } finally {
+    isInitializing = false;
   }
 }
 
@@ -225,15 +259,19 @@ function getWAStatus() {
 async function logoutWhatsApp() {
   try {
     if (sock) {
-      await sock.logout();
+      try { sock.ev.removeAllListeners(); } catch (e) {}
+      try { await sock.logout(); } catch (e) {}
+      try { sock.end(); } catch (e) {}
+      sock = null;
     }
     fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
     connectionStatus = 'disconnected';
     currentQR = null;
     db.prepare("UPDATE settings SET value = 'disconnected' WHERE key = 'wa_status'").run();
-    setTimeout(initWhatsApp, 2000);
+    scheduleReconnect(2000);
     return { success: true };
-  } catch(e) {
+  } catch (e) {
     return { success: false, error: e.message };
   }
 }

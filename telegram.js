@@ -154,6 +154,13 @@ async function sendTelegramDocument(filePath, caption, customToken, customChatId
   }
 }
 
+function formatWibDate(d = new Date()) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 async function backupDatabaseToTelegram(customCaption) {
   const cfg = getTelegramConfig();
   if (!cfg.enabled || !cfg.botToken || !cfg.chatId) {
@@ -161,8 +168,8 @@ async function backupDatabaseToTelegram(customCaption) {
   }
 
   const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toLocaleTimeString('id-ID');
+  const dateStr = formatWibDate(now);
+  const timeStr = now.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' });
   const tempBackupName = `lenxynet-backup-${dateStr}-${Date.now()}.sqlite`;
   const tempBackupPath = path.join(__dirname, tempBackupName);
 
@@ -321,8 +328,8 @@ async function generatePortableRsc(api, routerIdentity, routerModel, routerVersi
   ]);
 
   const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toLocaleTimeString('id-ID');
+  const dateStr = formatWibDate(now);
+  const timeStr = now.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' });
 
   let rsc = '';
   rsc += `# =========================================================\n`;
@@ -384,6 +391,7 @@ async function generatePortableRsc(api, routerIdentity, routerModel, routerVersi
         if (p['remote-address']) line += ` remote-address="${p['remote-address']}"`;
         if (p['rate-limit']) line += ` rate-limit="${p['rate-limit']}"`;
         if (p['only-one']) line += ` only-one=${p['only-one']}`;
+        if (p.comment !== undefined && p.comment !== '') line += ` comment="${p.comment}"`;
         rsc += `${line}\n`;
       }
     }
@@ -437,8 +445,8 @@ async function backupMikrotikToTelegram(customCaption) {
   }
 
   const now = new Date();
-  const dateStr = now.toISOString().slice(0, 10);
-  const timeStr = now.toLocaleTimeString('id-ID').replace(/:/g, '.');
+  const dateStr = formatWibDate(now);
+  const timeStr = now.toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' }).replace(/:/g, '.');
   const cleanHost = routerCfg.host.replace(/\./g, '_');
   const baseName = `MikroTik_${cleanHost}_${dateStr}`;
 

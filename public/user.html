@@ -409,7 +409,7 @@
       <!-- Support Contact -->
       <div class="pt-2 text-center">
         <p class="text-[11px] text-slate-500">Ada pertanyaan atau kendala koneksi?</p>
-        <a href="https://wa.me/" target="_blank"
+        <a id="support-wa-link" href="https://wa.me/" target="_blank"
           class="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 font-semibold mt-1 transition">
           <i class="fa-brands fa-whatsapp text-sm"></i> Hubungi Bantuan WhatsApp
         </a>
@@ -472,10 +472,13 @@
       const icon = type === 'success' ? 'fa-circle-check text-emerald-400' :
         type === 'error' ? 'fa-circle-xmark text-rose-400' : 'fa-circle-info text-sky-400';
 
-      toast.innerHTML = `
-        <i class="fa-solid ${icon} text-base shrink-0"></i>
-        <span class="font-semibold">${message}</span>
-      `;
+      const iconEl = document.createElement('i');
+      iconEl.className = `fa-solid ${icon} text-base shrink-0`;
+      const spanEl = document.createElement('span');
+      spanEl.className = 'font-semibold';
+      spanEl.textContent = message;
+      toast.appendChild(iconEl);
+      toast.appendChild(spanEl);
       container.appendChild(toast);
 
       setTimeout(() => {
@@ -694,16 +697,36 @@
         const data = await res.json();
         const u = data.user;
         currentBillId = u.bill_id;
-        singleBillPrice = Number(u.bill_amount) || 150000;
-        updateTotalAmountDisplay();
+        singleBillPrice = Number(u.unit_price || u.plan_price || u.bill_amount) || 100000;
 
         document.getElementById('user-name').innerText = u.name;
         document.getElementById('user-pppoe').innerText = u.pppoe_username;
         document.getElementById('user-speed').innerText = u.plan_speed || '10 Mbps';
         document.getElementById('user-due').innerText = u.nextDueDateFull || (`Tgl ${u.due_date} tiap bulan`);
-        document.getElementById('bill-period').innerText = u.paidUntilPeriod ? `${u.paidUntilPeriod} (Lunas)` : u.bill_period;
-        document.getElementById('bill-amount').innerText = 'Rp ' + Number(u.bill_amount).toLocaleString('id-ID');
+        document.getElementById('bill-period').innerText = (u.bill_status === 'paid' && u.paidUntilPeriod)
+          ? `${u.paidUntilPeriod} (Lunas)`
+          : (u.unpaidCount > 1 ? `${u.bill_period} (+${u.unpaidCount - 1} bln tunggakan)` : u.bill_period);
         document.getElementById('user-ip').innerText = u.remoteAddress || '-';
+
+        if (u.bill_status === 'pending_verification') {
+          document.getElementById('bill-amount').innerText = 'Rp ' + Number(u.bill_amount).toLocaleString('id-ID');
+          const lbl = document.getElementById('label-bill-amount');
+          if (lbl) lbl.innerText = (u.bill_duration > 1) ? `Total Tagihan (${u.bill_duration} Bulan):` : 'Total Tagihan Bulanan:';
+        } else {
+          updateTotalAmountDisplay();
+        }
+
+        // Update link WhatsApp Admin Support secara dinamis dari Pengaturan Toko
+        const waSupportLink = document.getElementById('support-wa-link');
+        if (waSupportLink && data.adminWaNumber) {
+          let waClean = String(data.adminWaNumber).replace(/\D/g, '');
+          if (waClean.startsWith('0')) waClean = '62' + waClean.substring(1);
+          else if (waClean.startsWith('8')) waClean = '62' + waClean;
+          if (waClean.length >= 10) {
+            const prefillText = encodeURIComponent(`Halo Admin LenxyNet, saya pelanggan PPPoE "${u.pppoe_username}" (${u.name}) ingin bertanya mengenai layanan.`);
+            waSupportLink.href = `https://wa.me/${waClean}?text=${prefillText}`;
+          }
+        }
 
         // 1. Status Layanan (Normal Aktif / Terisolir)
         const statusBadge = document.getElementById('status-badge');

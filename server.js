@@ -1,5 +1,8 @@
+process.env.TZ = 'Asia/Jakarta';
+
 const express = require('express');
 const path = require('path');
+const os = require('os');
 const db = require('./db');
 const { 
   syncFromMikrotik, 
@@ -14,7 +17,8 @@ const {
   getMikrotikInterfaces,
   getMikrotikTraffic,
   getMikrotikActiveSessions,
-  parsePlanPrice
+  parsePlanPrice,
+  getEffectiveDueDate
 } = require('./mikrotik');
 const { runAutoIsolirCheck, startCronJobs } = require('./cron');
 const { initWhatsApp, getWAStatus, logoutWhatsApp, sendPaymentSuccessNotice, sendReminderHMinus3, sendReminderHPlus1, sendPromoNotice, sendWhatsAppMessage, sendNotificationToAdmin } = require('./wa');
@@ -26,6 +30,9 @@ const fs = require('fs');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Percayai reverse proxy (Cloudflare Tunnel) agar req.ip dan req.protocol terbaca akurat
+app.set('trust proxy', 1);
+
 // Security Headers Middleware
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -33,6 +40,11 @@ app.use((req, res, next) => {
   res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   next();
+});
+
+// Lindungi file CSV data pelanggan mentah agar tidak bisa diakses langsung oleh publik tanpa login Admin
+app.use(['/data_pelanggan_pppoe.csv', '/data_pelanggan_excel.csv'], (req, res) => {
+  return res.status(403).send('Akses ditolak: Silakan login melalui Dashboard Admin untuk mengunduh data pelanggan.');
 });
 
 app.use(express.json({ limit: '20mb' }));
@@ -125,6 +137,21 @@ function getDataConflicts() {
   return conflicts;
 }
 
+// Helper Deteksi IP LAN Aktif Server (Windows PC maupun STB Armbian Linux)
+function getLocalLanIp() {
+  try {
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name]) {
+        if (net.family === 'IPv4' && !net.internal) {
+          return net.address;
+        }
+      }
+    }
+  } catch (e) {}
+  return '127.0.0.1';
+}
+
 // Helper Mendapatkan Base URL Portal Pelanggan (Domain Cloudflare / Custom atau Fallback Lokal)
 function getPortalBaseUrl(req = null) {
   const publicUrl = db.prepare("SELECT value FROM settings WHERE key = 'public_portal_url'").get()?.value;
@@ -140,7 +167,7 @@ function getPortalBaseUrl(req = null) {
     const protocol = req.protocol;
     return `${protocol}://${host}`;
   }
-  return 'http://192.168.55.254';
+  return `http://${getLocalLanIp()}`;
 }
 
 // Helper Pencatat Log Aktivitas Sistem
@@ -246,20 +273,53 @@ function requireMikrotikConnected(req, res, next) {
 
 // === ADMIN AUTHENTICATION & SESSION ROUTES ===
 
+const adminLoginAttempts = new Map();
+
 app.post('/api/admin/login', (req, res) => {
+  const clientIp = String(req.headers['cf-connecting-ip'] || req.ip || 'unknown');
+  const nowTs = Date.now();
+  const attempt = adminLoginAttempts.get(clientIp);
+  if (attempt && attempt.blockedUntil && nowTs < attempt.blockedUntil) {
+    const waitMin = Math.ceil((attempt.blockedUntil - nowTs) / 60000);
+    return res.status(429).json({
+      success: false,
+      error: `Terlalu banyak percobaan login salah! Demi keamanan, coba lagi dalam ${waitMin} menit.`
+    });
+  }
+
   const { username, password } = req.body;
   const currentAdminUser = db.prepare("SELECT value FROM settings WHERE key = 'admin_username'").get()?.value || 'admin';
   const currentAdminPass = db.prepare("SELECT value FROM settings WHERE key = 'admin_password'").get()?.value || 'admin123';
 
   if (username === currentAdminUser && password === currentAdminPass) {
+    adminLoginAttempts.delete(clientIp);
     // Generate secure crypto session token
     const token = 'lx_adm_' + crypto.randomBytes(24).toString('hex');
     db.prepare("INSERT INTO admin_sessions (token, expires_at) VALUES (?, datetime('now', '+1 day', 'localtime'))").run(token);
     logActivity('LOGIN', `Admin login berhasil (${username})`, 'ADMIN');
     res.json({ success: true, token, username: currentAdminUser, message: 'Login berhasil! Selamat datang Admin LenxyNet.' });
   } else {
-    logActivity('LOGIN', `Percobaan login admin gagal (${username})`, 'ADMIN', 'failed');
-    res.status(401).json({ success: false, error: 'Username atau Password Admin salah!' });
+    const prevCount = (attempt && (nowTs - attempt.firstAt) < 10 * 60 * 1000) ? attempt.count : 0;
+    const newCount = prevCount + 1;
+    const blockedUntil = newCount >= 5 ? (nowTs + 5 * 60 * 1000) : null;
+    adminLoginAttempts.set(clientIp, {
+      count: newCount,
+      firstAt: (attempt && (nowTs - attempt.firstAt) < 10 * 60 * 1000) ? attempt.firstAt : nowTs,
+      blockedUntil
+    });
+    if (adminLoginAttempts.size > 200) {
+      for (const [k, v] of adminLoginAttempts.entries()) {
+        if (nowTs - v.firstAt > 15 * 60 * 1000) adminLoginAttempts.delete(k);
+      }
+    }
+    logActivity('LOGIN', `Percobaan login admin gagal (${username}) dari ${clientIp}`, 'ADMIN', 'failed');
+    const sisa = Math.max(0, 5 - newCount);
+    res.status(401).json({
+      success: false,
+      error: sisa > 0
+        ? `Username atau Password Admin salah! (Sisa percobaan: ${sisa}x)`
+        : 'Terlalu banyak percobaan salah! Akun login dikunci sementara selama 5 menit.'
+    });
   }
 });
 
@@ -562,10 +622,35 @@ app.get('/api/admin/export/customers.csv', (req, res) => {
   }
 });
 
-// Download Full Backup Database SQLite
+// Download Full Backup Database SQLite (WAL-Safe Snapshot via VACUUM INTO)
 app.get('/api/admin/backup/database', (req, res) => {
-  const dbFile = path.join(__dirname, 'database.sqlite');
-  res.download(dbFile, `lenxynet-backup-${new Date().toISOString().slice(0, 10)}.sqlite`);
+  const now = new Date();
+  const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const tempPath = path.join(__dirname, `temp-download-backup-${Date.now()}.sqlite`);
+  try {
+    db.exec(`VACUUM INTO '${tempPath.replace(/\\/g, '/')}'`);
+    res.download(tempPath, `lenxynet-backup-${dateStr}.sqlite`, () => {
+      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (e) {}
+    });
+  } catch (e) {
+    try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (err) {}
+    res.status(500).send('Gagal membuat snapshot backup database: ' + e.message);
+  }
+});
+
+// Endpoint CSV Terproteksi untuk Editor Massal
+app.get('/api/admin/editor-csv', (req, res) => {
+  const rootCsv = path.join(__dirname, 'data_pelanggan_pppoe.csv');
+  const pubCsv = path.join(__dirname, 'public', 'data_pelanggan_pppoe.csv');
+  const target = fs.existsSync(rootCsv) ? rootCsv : pubCsv;
+  if (!fs.existsSync(target)) return res.status(404).send('File data tidak ditemukan.');
+  res.sendFile(target);
+});
+
+app.get('/api/admin/editor-excel', (req, res) => {
+  const target = path.join(__dirname, 'public', 'data_pelanggan_excel.csv');
+  if (!fs.existsSync(target)) return res.status(404).send('File Excel tidak ditemukan.');
+  res.download(target, 'data_pelanggan_excel.csv');
 });
 
 // === WHATSAPP GATEWAY ROUTES ===
@@ -923,6 +1008,68 @@ app.post('/api/admin/message-templates/reset/:id', requireAdminAuth, (req, res) 
   }
 });
 
+// Helper Alokasi Pembayaran Multi-Bulan Berurutan (Anti-Timpa Bulan Lunas & Bereskan Tunggakan Lama)
+function allocateMultiMonthPayment(customerId, preferredStartPeriod, durationMonths, unitPrice, paymentMethod) {
+  const duration = Math.min(12, Math.max(1, parseInt(durationMonths, 10) || 1));
+  const now = new Date();
+  const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Cari tagihan paling awal yang belum lunas; jika tidak ada, lanjutkan setelah periode lunas terakhir
+  let startPeriod = preferredStartPeriod;
+  if (!startPeriod) {
+    const oldestUnpaid = db.prepare("SELECT period FROM bills WHERE customer_id = ? AND status != 'paid' ORDER BY period ASC LIMIT 1").get(customerId);
+    if (oldestUnpaid) {
+      startPeriod = oldestUnpaid.period;
+    } else {
+      const lastPaid = db.prepare("SELECT period FROM bills WHERE customer_id = ? AND status = 'paid' ORDER BY period DESC LIMIT 1").get(customerId);
+      if (lastPaid) {
+        const [ly, lm] = lastPaid.period.split('-').map(Number);
+        const nextDt = new Date(ly, lm, 1); // lm adalah 1-based sehingga new Date(ly, lm, 1) = bulan berikutnya
+        startPeriod = `${nextDt.getFullYear()}-${String(nextDt.getMonth() + 1).padStart(2, '0')}`;
+      } else {
+        startPeriod = currentPeriod;
+      }
+    }
+  }
+
+  let [yr, mo] = startPeriod.split('-').map(Number);
+  const periodsPaid = [];
+  let guard = 0;
+
+  while (periodsPaid.length < duration && guard < 36) {
+    const dt = new Date(yr, mo - 1 + guard, 1);
+    const pKey = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+    const existing = db.prepare('SELECT id, status FROM bills WHERE customer_id = ? AND period = ?').get(customerId, pKey);
+    guard++;
+
+    if (existing && existing.status === 'paid') {
+      // Lewati bulan yang sudah lunas agar pelanggan tidak kehilangan hak bulan berikutnya
+      continue;
+    }
+
+    if (existing) {
+      db.prepare(`
+        UPDATE bills 
+        SET status = 'paid', amount = ?, duration_months = 1, paid_at = datetime('now', 'localtime'), payment_method = ?, rejection_reason = NULL
+        WHERE id = ?
+      `).run(unitPrice, paymentMethod, existing.id);
+    } else {
+      db.prepare(`
+        INSERT INTO bills (customer_id, period, amount, duration_months, status, paid_at, payment_method)
+        VALUES (?, ?, ?, 1, 'paid', datetime('now', 'localtime'), ?)
+      `).run(customerId, pKey, unitPrice, paymentMethod);
+    }
+    periodsPaid.push(pKey);
+  }
+
+  return {
+    duration,
+    periodsPaid,
+    totalAmount: unitPrice * periodsPaid.length,
+    periodLabel: periodsPaid.length > 1 ? `${periodsPaid[0]} s/d ${periodsPaid[periodsPaid.length - 1]}` : (periodsPaid[0] || currentPeriod)
+  };
+}
+
 // Kirim WA Manual per User dari Dashboard (Bisa by Customer ID atau PPPoE Username)
 app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
   if (!isMikrotikConnected()) {
@@ -940,7 +1087,7 @@ app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
     const numId = parseInt(id, 10);
     if (!isNaN(numId)) {
       cust = db.prepare(`
-        SELECT c.*, p.name as plan_name, b.amount as bill_amount, b.period as bill_period, b.payment_method
+        SELECT c.*, p.name as plan_name, p.price as plan_price, b.amount as bill_amount, b.period as bill_period, b.payment_method
         FROM customers c
         LEFT JOIN plans p ON c.plan_id = p.id
         LEFT JOIN bills b ON c.id = b.customer_id
@@ -952,7 +1099,7 @@ app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
     // Jika tidak ketemu by numeric ID, cari berdasarkan username PPPoE atau nama
     if (!cust) {
       cust = db.prepare(`
-        SELECT c.*, p.name as plan_name, b.amount as bill_amount, b.period as bill_period, b.payment_method
+        SELECT c.*, p.name as plan_name, p.price as plan_price, b.amount as bill_amount, b.period as bill_period, b.payment_method
         FROM customers c
         LEFT JOIN plans p ON c.plan_id = p.id
         LEFT JOIN bills b ON c.id = b.customer_id
@@ -968,10 +1115,6 @@ app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
     if (!cust.phone || cust.phone === '-') {
       return res.status(400).json({ error: 'Nomor WhatsApp pelanggan belum diisi!' });
     }
-
-    // Pastikan nominal tagihan valid
-    const billAmount = cust.bill_amount || 150000;
-    const billPeriod = cust.bill_period || '2026-11';
 
     const baseUrl = getPortalBaseUrl(req);
     const phoneParam = (cust.phone && cust.phone !== '-') ? cust.phone : cust.pppoe_username;
@@ -991,33 +1134,10 @@ app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
 
       sendRes = await sendPromoNotice(cust, promoMsg, plansListText, portalUrl);
     } else {
-      // Pembayaran Manual / Cash: Mendukung multi-bulan (1, 2, 3, 6, 12 bulan)
-      const duration = parseInt(req.body.durationMonths, 10) || 1;
-      const singleMonthPrice = cust.bill_amount || 150000;
-      const totalAmount = singleMonthPrice * duration;
-
-      const now = new Date();
-      const currentMonth = now.getMonth();
-      const currentYear = now.getFullYear();
-
-      // Loop buat atau update tagihan bulan-bulan ke depan menjadi 'paid'
-      const periodsPaid = [];
-      for (let i = 0; i < duration; i++) {
-        const targetDate = new Date(currentYear, currentMonth + i, 1);
-        const pYear = targetDate.getFullYear();
-        const pMonth = String(targetDate.getMonth() + 1).padStart(2, '0');
-        const periodKey = `${pYear}-${pMonth}`;
-        periodsPaid.push(periodKey);
-
-        const existingBill = db.prepare('SELECT id FROM bills WHERE customer_id = ? AND period = ?').get(cust.id, periodKey);
-        if (existingBill) {
-          db.prepare("UPDATE bills SET status = 'paid', amount = ?, paid_at = datetime('now', 'localtime'), payment_method = 'Cash / Tunai' WHERE id = ?")
-            .run(singleMonthPrice, existingBill.id);
-        } else {
-          db.prepare("INSERT INTO bills (customer_id, period, amount, status, paid_at, payment_method) VALUES (?, ?, ?, 'paid', datetime('now', 'localtime'), 'Cash / Tunai')")
-            .run(cust.id, periodKey, singleMonthPrice);
-        }
-      }
+      // Pembayaran Manual / Cash: Mendukung multi-bulan (1, 2, 3, 6, 12 bulan) secara berurutan
+      const duration = Math.min(12, Math.max(1, parseInt(req.body.durationMonths, 10) || 1));
+      const singleMonthPrice = cust.plan_price || cust.bill_amount || 100000;
+      const alloc = allocateMultiMonthPayment(cust.id, null, duration, singleMonthPrice, 'Cash / Tunai');
 
       // Update status customer di database menjadi 'active'
       db.prepare("UPDATE customers SET status = 'active' WHERE id = ?").run(cust.id);
@@ -1030,17 +1150,12 @@ app.post('/api/admin/customers/:id/send-wa', async (req, res) => {
         console.error(`[Bayar Cash] Gagal enable secret di MikroTik:`, errMikrotik.message);
       }
 
-      // Kirim ucapan terima kasih via WhatsApp
-      const periodLabel = periodsPaid.length > 1 
-        ? `${periodsPaid[0]} s/d ${periodsPaid[periodsPaid.length - 1]}`
-        : periodsPaid[0];
-
-      logActivity('PAYMENT', `Pembayaran Tunai ${cust.name} sebesar Rp ${totalAmount.toLocaleString('id-ID')} (${periodLabel})`, cust.pppoe_username);
+      logActivity('PAYMENT', `Pembayaran Tunai ${cust.name} sebesar Rp ${alloc.totalAmount.toLocaleString('id-ID')} (${alloc.periodLabel})`, cust.pppoe_username);
 
       sendRes = await sendPaymentSuccessNotice(cust, { 
-        amount: totalAmount, 
-        period: periodLabel, 
-        durationMonths: duration,
+        amount: alloc.totalAmount, 
+        period: alloc.periodLabel, 
+        durationMonths: alloc.duration,
         payment_method: 'Tunai / Cash (Kasir)' 
       });
     }
@@ -1077,7 +1192,7 @@ app.post('/api/admin/trigger-autoisolir', async (req, res) => {
   }
   try {
     const baseUrl = getPortalBaseUrl(req);
-    const result = await runAutoIsolirCheck(baseUrl);
+    const result = await runAutoIsolirCheck(baseUrl, { sendWa: true });
     let msg = `Cek Isolir selesai! Isolir baru: ${result.isolatedCount}`;
     if (result.waHMinus3Count > 0 || result.waHPlus1Count > 0) {
       msg += ` | Terkirim WA Reminder: ${result.waHMinus3Count + result.waHPlus1Count} pesan`;
@@ -1227,7 +1342,7 @@ app.post('/api/admin/customers', async (req, res) => {
       name: cleanName,
       password: String(password).trim(),
       profile,
-      phone: phone ? phone.trim() : '-',
+      phone: normalizePhoneNumber(phone),
       dueDate: parseInt(dueDate) || 10,
       comment,
       initialPayment: initialPayment || 'paid'
@@ -1285,8 +1400,8 @@ app.post('/api/admin/customers/:id/update-due-date', requireAdminAuth, requireMi
     await updateCustomerDueDateInMikrotik(cust.pppoe_username, numDue);
     logActivity('UPDATE_CUSTOMER', `Ubah jatuh tempo ${cust.pppoe_username} dari tgl ${cust.due_date} ke tgl ${numDue}`, cust.pppoe_username);
 
-    // Langsung jalankan pengecekan isolir agar status tagihan & isolir sinkron seketika
-    runAutoIsolirCheck().catch(e => console.warn('[Auto-Isolir Update DueDate] Error:', e.message));
+    // Langsung jalankan pengecekan isolir agar status tagihan & isolir sinkron seketika (tanpa spam WA)
+    runAutoIsolirCheck(null, { sendWa: false }).catch(e => console.warn('[Auto-Isolir Update DueDate] Error:', e.message));
 
     res.json({ 
       success: true, 
@@ -1401,11 +1516,15 @@ function formatNextDueDate(dueDate, lastPaidPeriod, comment = '') {
 
   if (lastPaidPeriod) {
     const parts = lastPaidPeriod.split('-').map(Number);
-    const target = new Date(parts[0], parts[1], dueDate); // parts[1] otomatis jadi bulan berikutnya
-    return `${String(target.getDate()).padStart(2, '0')} ${monthNames[target.getMonth()]} ${target.getFullYear()}`;
+    const nextMonthDate = new Date(parts[0], parts[1], 1); // bulan berikutnya setelah lastPaidPeriod
+    const targetYear = nextMonthDate.getFullYear();
+    const targetMonth = nextMonthDate.getMonth() + 1;
+    const effDay = getEffectiveDueDate(targetYear, targetMonth, parseInt(dueDate, 10));
+    return `${String(effDay).padStart(2, '0')} ${monthNames[targetMonth - 1]} ${targetYear}`;
   } else {
     const now = new Date();
-    return `${day} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
+    const effDay = getEffectiveDueDate(now.getFullYear(), now.getMonth() + 1, parseInt(dueDate, 10));
+    return `${String(effDay).padStart(2, '0')} ${monthNames[now.getMonth()]} ${now.getFullYear()}`;
   }
 }
 
@@ -1421,7 +1540,7 @@ app.get('/api/admin/customers', async (req, res) => {
 
     const query = `
       SELECT c.*, p.name as plan_name, p.speed as plan_speed, p.price as plan_price,
-             b.id as bill_id, b.status as bill_status, b.amount as bill_amount, b.period as bill_period, b.paid_at
+             b.id as bill_id, b.status as bill_status, b.amount as bill_amount, b.duration_months as bill_duration, b.period as bill_period, b.paid_at
       FROM customers c
       LEFT JOIN plans p ON c.plan_id = p.id
       LEFT JOIN bills b ON c.id = b.customer_id AND b.period = ?
@@ -1438,7 +1557,7 @@ app.get('/api/admin/customers', async (req, res) => {
         c.bill_status = 'unpaid';
         c.bill_amount = amount;
         c.bill_period = currentPeriod;
-      } else if (c.bill_status === 'unpaid' && c.plan_price && c.bill_amount !== c.plan_price) {
+      } else if (c.bill_status === 'unpaid' && (c.bill_duration || 1) === 1 && c.plan_price && c.bill_amount !== c.plan_price) {
         // Otomatis sinkronkan harga tagihan belum bayar jika ada penyesuaian harga profile MikroTik
         db.prepare('UPDATE bills SET amount = ? WHERE id = ?').run(c.plan_price, c.bill_id);
         c.bill_amount = c.plan_price;
@@ -1699,19 +1818,16 @@ app.post('/api/user/request-otp', async (req, res) => {
       });
     }
 
-    // 2. Cooldown check: Cek apakah ada request OTP sebelumnya dalam kurun waktu 60 detik
-    const prevOTP = db.prepare('SELECT * FROM otp_codes WHERE phone = ?').get(cleanPhone);
-    if (prevOTP && prevOTP.last_requested_at) {
-      const lastReqTime = new Date(prevOTP.last_requested_at).getTime();
-      const nowTime = Date.now();
-      const elapsedSec = Math.floor((nowTime - lastReqTime) / 1000);
-      const cooldownSec = 60;
-      if (elapsedSec < cooldownSec) {
-        const remaining = cooldownSec - elapsedSec;
-        return res.status(429).json({ 
-          error: `Harap tunggu ${remaining} detik sebelum meminta kode OTP baru.` 
-        });
-      }
+    // 2. Cooldown check: Cek apakah ada request OTP sebelumnya dalam kurun waktu 60 detik (via SQLite localtime akurat)
+    const prevOTP = db.prepare(`
+      SELECT *, (strftime('%s', 'now', 'localtime') - strftime('%s', last_requested_at)) as elapsed_sec 
+      FROM otp_codes WHERE phone = ?
+    `).get(cleanPhone);
+    if (prevOTP && prevOTP.elapsed_sec !== null && prevOTP.elapsed_sec < 60) {
+      const remaining = Math.max(1, 60 - prevOTP.elapsed_sec);
+      return res.status(429).json({ 
+        error: `Harap tunggu ${remaining} detik sebelum meminta kode OTP baru.` 
+      });
     }
 
     // 3. Generate 4 digit OTP acak & masa berlaku 5 menit
@@ -1838,69 +1954,85 @@ app.get('/api/user/portal', requireUserOrAdminAuth, async (req, res) => {
       identifier = req.query.id;
     }
 
-    let user = null;
+    let custRow = null;
     if (customerId) {
-      const query = `
-        SELECT c.*, p.name as plan_name, p.speed as plan_speed, p.price as plan_price,
-               b.id as bill_id, b.status as bill_status, b.amount as bill_amount, b.period as bill_period, b.paid_at,
-               b.proof_image, b.proof_uploaded_at, b.rejection_reason
+      custRow = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.speed as plan_speed, p.price as plan_price
         FROM customers c
         LEFT JOIN plans p ON c.plan_id = p.id
-        LEFT JOIN bills b ON c.id = b.customer_id
         WHERE c.id = ?
-        ORDER BY b.id DESC LIMIT 1
-      `;
-      user = db.prepare(query).get(customerId);
+      `).get(customerId);
     } else if (identifier) {
-      const query = `
-        SELECT c.*, p.name as plan_name, p.speed as plan_speed, p.price as plan_price,
-               b.id as bill_id, b.status as bill_status, b.amount as bill_amount, b.period as bill_period, b.paid_at,
-               b.proof_image, b.proof_uploaded_at, b.rejection_reason
+      const normId = normalizePhoneNumber(identifier);
+      custRow = db.prepare(`
+        SELECT c.*, p.name as plan_name, p.speed as plan_speed, p.price as plan_price
         FROM customers c
         LEFT JOIN plans p ON c.plan_id = p.id
-        LEFT JOIN bills b ON c.id = b.customer_id
-        WHERE c.pppoe_username = ? OR c.name = ? OR c.phone = ?
-        ORDER BY b.id DESC LIMIT 1
-      `;
-      user = db.prepare(query).get(identifier, identifier, identifier);
+        WHERE c.pppoe_username = ? OR c.name = ? OR c.phone = ? OR c.phone = ?
+      `).get(identifier, identifier, identifier, normId);
     }
 
-    if (!user) return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
+    if (!custRow) return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
 
-    // Jika belum ada tagihan sama sekali, buatkan tagihan default periode berjalan
-    if (!user.bill_id) {
-      const now = new Date();
-      const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const amount = user.plan_price || 150000;
-      const insertBill = db.prepare('INSERT INTO bills (customer_id, period, amount, status) VALUES (?, ?, ?, ?)').run(user.id, currentPeriod, amount, 'unpaid');
-      user.bill_id = insertBill.lastInsertRowid;
-      user.bill_status = 'unpaid';
-      user.bill_amount = amount;
-      user.bill_period = currentPeriod;
-      user.proof_image = null;
-      user.proof_uploaded_at = null;
-      user.rejection_reason = null;
+    const now = new Date();
+    const currentPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const unitPrice = custRow.plan_price || 100000;
+
+    // Pastikan tagihan periode berjalan tersedia jika belum ada sama sekali
+    const curBillCheck = db.prepare('SELECT id FROM bills WHERE customer_id = ? AND period = ?').get(custRow.id, currentPeriod);
+    const anyBillCheck = db.prepare('SELECT id FROM bills WHERE customer_id = ? LIMIT 1').get(custRow.id);
+    if (!curBillCheck && !anyBillCheck) {
+      db.prepare('INSERT INTO bills (customer_id, period, amount, status) VALUES (?, ?, ?, ?)').run(custRow.id, currentPeriod, unitPrice, 'unpaid');
     }
+
+    // Prioritaskan tagihan yang ditampilkan di portal:
+    // 1) Sedang pending_verification (agar user melihat status menunggu verifikasi)
+    // 2) Tagihan unpaid paling lama (tunggakan terlama dibayar dulu agar bisa unisolir tuntas!)
+    // 3) Tagihan paid terbaru
+    let activeBill = db.prepare("SELECT * FROM bills WHERE customer_id = ? AND status = 'pending_verification' ORDER BY period ASC LIMIT 1").get(custRow.id);
+    if (!activeBill) {
+      activeBill = db.prepare("SELECT * FROM bills WHERE customer_id = ? AND status = 'unpaid' ORDER BY period ASC LIMIT 1").get(custRow.id);
+    }
+    if (!activeBill) {
+      activeBill = db.prepare("SELECT * FROM bills WHERE customer_id = ? ORDER BY period DESC, id DESC LIMIT 1").get(custRow.id);
+    }
+
+    const unpaidBillsList = db.prepare("SELECT period, amount FROM bills WHERE customer_id = ? AND status = 'unpaid' ORDER BY period ASC").all(custRow.id);
+
+    const user = {
+      ...custRow,
+      bill_id: activeBill ? activeBill.id : null,
+      bill_status: activeBill ? activeBill.status : 'paid',
+      bill_amount: activeBill ? activeBill.amount : unitPrice,
+      unit_price: unitPrice,
+      bill_duration: activeBill ? (activeBill.duration_months || 1) : 1,
+      bill_period: activeBill ? activeBill.period : currentPeriod,
+      paid_at: activeBill ? activeBill.paid_at : null,
+      payment_method: activeBill ? activeBill.payment_method : null,
+      proof_image: activeBill ? activeBill.proof_image : null,
+      proof_uploaded_at: activeBill ? activeBill.proof_uploaded_at : null,
+      rejection_reason: activeBill ? activeBill.rejection_reason : null,
+      unpaidCount: unpaidBillsList.length,
+      unpaidPeriods: unpaidBillsList.map(b => b.period)
+    };
 
     // Dapatkan data tanggal jatuh tempo lengkap dan periode yang sudah dibayar
     const lastPaid = db.prepare("SELECT period FROM bills WHERE customer_id = ? AND status = 'paid' ORDER BY period DESC LIMIT 1").get(user.id);
     const nextDueFull = formatNextDueDate(user.due_date, lastPaid ? lastPaid.period : null, user.comment || '');
 
-    // Dapatkan data live koneksi dari MikroTik untuk user ini
+    // Dapatkan data live koneksi dari cache/MikroTik (anti-banjiri API saat polling 3 detik!)
     let liveData = { isOnline: false, uptime: '-', remoteAddress: '-' };
     if (isMikrotikConnected()) {
       try {
-        const { api, client } = await require('./mikrotik').getMikrotikClient();
-        const actives = await client.menu('/ppp active').get();
-        const activeSession = actives.find(a => a.name === user.pppoe_username);
+        const liveList = await getMikrotikLiveStatus();
+        const activeSession = liveList.find(a => a.name === user.pppoe_username && a.isOnline);
         if (activeSession) {
           liveData = {
             isOnline: true,
             uptime: activeSession.uptime || '-',
-            remoteAddress: activeSession.address || '-'
+            remoteAddress: activeSession.remoteAddress || '-'
           };
         }
-        api.close();
       } catch (e) {
         console.warn('Could not fetch active status for user portal:', e.message);
       }
@@ -1908,7 +2040,7 @@ app.get('/api/user/portal', requireUserOrAdminAuth, async (req, res) => {
 
     const toleranceDays = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'tolerance_days'").get()?.value || '3');
     const qrisImage = db.prepare("SELECT value FROM settings WHERE key = 'qris_image'").get()?.value || '/uploads/qris/default-qris.png';
-    const mockPaymentEnabled = db.prepare("SELECT value FROM settings WHERE key = 'mock_payment_enabled'").get()?.value === 'true';
+    const adminWaNumber = db.prepare("SELECT value FROM settings WHERE key = 'admin_wa_number'").get()?.value || '';
 
     res.json({
       user: {
@@ -1921,7 +2053,8 @@ app.get('/api/user/portal', requireUserOrAdminAuth, async (req, res) => {
       },
       toleranceDays,
       qrisImage,
-      mockPaymentEnabled
+      adminWaNumber,
+      mockPaymentEnabled: false
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -1972,10 +2105,7 @@ app.post('/api/admin/settings/qris', requireAdminAuth, (req, res) => {
         .run(String(public_portal_url).trim());
     }
 
-    if (mock_payment_enabled !== undefined) {
-      db.prepare("INSERT INTO settings (key, value) VALUES ('mock_payment_enabled', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        .run(mock_payment_enabled ? 'true' : 'false');
-    }
+    db.prepare("INSERT INTO settings (key, value) VALUES ('mock_payment_enabled', 'false') ON CONFLICT(key) DO UPDATE SET value = 'false'").run();
 
     if (qris_image_data && typeof qris_image_data === 'string' && qris_image_data.startsWith('data:image/')) {
       const matches = qris_image_data.match(/^data:image\/([a-zA-Z0-9]+);base64,(.+)$/);
@@ -1989,6 +2119,14 @@ app.post('/api/admin/settings/qris', requireAdminAuth, (req, res) => {
         const ext = validation.ext;
         const qrisDir = path.join(__dirname, 'public', 'uploads', 'qris');
         if (!fs.existsSync(qrisDir)) fs.mkdirSync(qrisDir, { recursive: true });
+
+        // Hapus file QRIS kustom sebelumnya agar storage STB tetap bersih
+        const oldQris = db.prepare("SELECT value FROM settings WHERE key = 'qris_image'").get()?.value || '';
+        if (oldQris.startsWith('/uploads/qris/qris_custom_')) {
+          const oldPath = path.join(qrisDir, path.basename(oldQris));
+          try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch (e) {}
+        }
+
         const filename = `qris_custom_${Date.now()}.${ext}`;
         const filePath = path.join(qrisDir, filename);
         if (!path.resolve(filePath).startsWith(path.resolve(qrisDir))) {
@@ -2104,14 +2242,24 @@ app.post('/api/user/upload-proof', requireUserOrAdminAuth, async (req, res) => {
       return res.status(400).json({ error: 'File gambar bukti transfer wajib di-upload!' });
     }
 
-    // Cek kepemilikan tagihan
+    // Cek kepemilikan tagihan + harga paket asli
     let bill = null;
     if (req.userSession) {
-      bill = db.prepare('SELECT b.*, c.name, c.pppoe_username, c.phone FROM bills b JOIN customers c ON b.customer_id = c.id WHERE b.id = ? AND b.customer_id = ?')
-        .get(bill_id, req.userSession.customer_id);
+      bill = db.prepare(`
+        SELECT b.*, c.name, c.pppoe_username, c.phone, c.plan_id, p.price as plan_price, p.name as plan_name
+        FROM bills b 
+        JOIN customers c ON b.customer_id = c.id 
+        LEFT JOIN plans p ON c.plan_id = p.id
+        WHERE b.id = ? AND b.customer_id = ?
+      `).get(bill_id, req.userSession.customer_id);
     } else if (req.adminSession) {
-      bill = db.prepare('SELECT b.*, c.name, c.pppoe_username, c.phone FROM bills b JOIN customers c ON b.customer_id = c.id WHERE b.id = ?')
-        .get(bill_id);
+      bill = db.prepare(`
+        SELECT b.*, c.name, c.pppoe_username, c.phone, c.plan_id, p.price as plan_price, p.name as plan_name
+        FROM bills b 
+        JOIN customers c ON b.customer_id = c.id 
+        LEFT JOIN plans p ON c.plan_id = p.id
+        WHERE b.id = ?
+      `).get(bill_id);
     }
 
     if (!bill) {
@@ -2132,6 +2280,11 @@ app.post('/api/user/upload-proof', requireUserOrAdminAuth, async (req, res) => {
       return res.status(429).json({ error: `Terlalu cepat! Harap tunggu ${waitSec} detik sebelum mengunggah kembali.` });
     }
     uploadProofRateLimitMap.set(clientId, nowTs);
+    if (uploadProofRateLimitMap.size > 500) {
+      for (const [k, ts] of uploadProofRateLimitMap.entries()) {
+        if (nowTs - ts > 60000) uploadProofRateLimitMap.delete(k);
+      }
+    }
 
     // Decode & Validasi Ketat Integritas Gambar (Magic Bytes & MIME whitelist)
     const matches = proof_image.match(/^data:image\/([a-zA-Z0-9_\-+]+);base64,(.+)$/);
@@ -2200,19 +2353,21 @@ app.post('/api/user/upload-proof', requireUserOrAdminAuth, async (req, res) => {
     }
     const publicUrl = `/uploads/proofs/${filename}`;
 
-    const duration = parseInt(durationMonths, 10) || 1;
-    const finalAmount = bill.amount * duration;
+    const duration = Math.min(12, Math.max(1, parseInt(durationMonths, 10) || 1));
+    const unitPrice = bill.plan_price || Math.round(bill.amount / Math.max(1, bill.duration_months || 1)) || 100000;
+    const finalAmount = unitPrice * duration;
 
-    // Update status bill menjadi pending_verification
+    // Update status bill menjadi pending_verification & simpan durasi bulan yang dibayar
     db.prepare(`
       UPDATE bills 
       SET status = 'pending_verification',
           amount = ?,
+          duration_months = ?,
           proof_image = ?,
           proof_uploaded_at = datetime('now', 'localtime'),
           rejection_reason = NULL
       WHERE id = ?
-    `).run(finalAmount, publicUrl, bill.id);
+    `).run(finalAmount, duration, publicUrl, bill.id);
 
     logActivity('PAYMENT', `Upload bukti transfer tagihan Rp ${finalAmount.toLocaleString('id-ID')} (${duration} bln)`, bill.pppoe_username);
 
@@ -2251,7 +2406,7 @@ app.get('/api/admin/pending-payments', requireAdminAuth, (req, res) => {
   if (!isMikrotikConnected()) return res.json([]);
   try {
     const list = db.prepare(`
-      SELECT b.id, b.customer_id, b.period, b.amount, b.status, b.proof_image, b.proof_uploaded_at, b.rejection_reason,
+      SELECT b.id, b.customer_id, b.period, b.amount, b.duration_months, b.status, b.proof_image, b.proof_uploaded_at, b.rejection_reason,
              c.name as customer_name, c.pppoe_username, c.phone as customer_phone, c.status as customer_status,
              p.name as plan_name, p.speed as plan_speed
       FROM bills b
@@ -2267,29 +2422,29 @@ app.get('/api/admin/pending-payments', requireAdminAuth, (req, res) => {
   }
 });
 
-// 5. Admin Menyetujui Pembayaran (Lunas & Unisolir MikroTik Otomatis)
+// 5. Admin Menyetujui Pembayaran (Lunas Multi-Bulan & Unisolir MikroTik Otomatis)
 app.post('/api/admin/payments/:id/approve', requireAdminAuth, requireMikrotikConnected, async (req, res) => {
   try {
     const { id } = req.params;
     const bill = db.prepare(`
-      SELECT b.*, c.name as customer_name, c.pppoe_username, c.phone as customer_phone
+      SELECT b.*, c.name as customer_name, c.pppoe_username, c.phone as customer_phone,
+             p.name as plan_name, p.price as plan_price
       FROM bills b
       JOIN customers c ON b.customer_id = c.id
+      LEFT JOIN plans p ON c.plan_id = p.id
       WHERE b.id = ?
     `).get(id);
 
     if (!bill) {
       return res.status(404).json({ error: 'Tagihan tidak ditemukan' });
     }
+    if (bill.status === 'paid') {
+      return res.status(400).json({ error: 'Tagihan ini sudah pernah disetujui / berstatus LUNAS.' });
+    }
 
-    // Update status bill to 'paid'
-    db.prepare(`
-      UPDATE bills
-      SET status = 'paid',
-          paid_at = datetime('now', 'localtime'),
-          payment_method = 'QRIS Toko'
-      WHERE id = ?
-    `).run(id);
+    const duration = Math.min(12, Math.max(1, parseInt(bill.duration_months, 10) || 1));
+    const unitPrice = bill.plan_price || Math.round(bill.amount / duration) || 100000;
+    const alloc = allocateMultiMonthPayment(bill.customer_id, bill.period, duration, unitPrice, 'QRIS Toko');
 
     // Update customer status to active
     db.prepare("UPDATE customers SET status = 'active' WHERE id = ?").run(bill.customer_id);
@@ -2301,7 +2456,7 @@ app.post('/api/admin/payments/:id/approve', requireAdminAuth, requireMikrotikCon
       console.error('Failed to enable secret on MikroTik upon approval:', e.message);
     }
 
-    logActivity('PAYMENT', `Admin menyetujui pembayaran QRIS Toko Rp ${bill.amount.toLocaleString('id-ID')} (${bill.period})`, bill.pppoe_username);
+    logActivity('PAYMENT', `Admin menyetujui pembayaran QRIS Toko Rp ${alloc.totalAmount.toLocaleString('id-ID')} (${alloc.periodLabel}, ${alloc.duration} bln)`, bill.pppoe_username);
 
     // Auto-Backup Bukti Transfer ke Telegram & Hapus dari Local Storage STB
     if (bill.proof_image && bill.proof_image.startsWith('/uploads/proofs/')) {
@@ -2312,10 +2467,11 @@ app.post('/api/admin/payments/:id/approve', requireAdminAuth, requireMikrotikCon
         try {
           const caption = `🟢 <b>[PEMBAYARAN QRIS DISETUJUI / LUNAS]</b>\n\n` +
             `• <b>Pelanggan:</b> ${bill.customer_name} (<code>${bill.pppoe_username}</code>)\n` +
-            `• <b>Nominal:</b> Rp ${Number(bill.amount).toLocaleString('id-ID')}\n` +
-            `• <b>Periode:</b> ${bill.period}\n` +
+            `• <b>Paket:</b> ${bill.plan_name || 'Internet PPPoE'}\n` +
+            `• <b>Nominal:</b> Rp ${Number(alloc.totalAmount).toLocaleString('id-ID')} (${alloc.duration} bulan)\n` +
+            `• <b>Periode:</b> ${alloc.periodLabel}\n` +
             `• <b>Metode:</b> QRIS Toko (Terverifikasi)\n` +
-            `• <b>Waktu:</b> ${new Date().toLocaleString('id-ID')}`;
+            `• <b>Waktu:</b> ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}`;
           await sendTelegramPhoto(localFilePath, caption);
         } catch (errTg) {
           console.warn('[Telegram] Gagal backup foto bukti approved:', errTg.message);
@@ -2329,19 +2485,19 @@ app.post('/api/admin/payments/:id/approve', requireAdminAuth, requireMikrotikCon
       }
     }
 
-    // Kirim notifikasi WhatsApp ke pelanggan
+    // Kirim notifikasi WhatsApp Struk Lunas lengkap dengan nama paket & durasi
     if (bill.customer_phone && bill.customer_phone !== '-') {
       try {
         await sendPaymentSuccessNotice(
-          { name: bill.customer_name, pppoe_username: bill.pppoe_username, phone: bill.customer_phone },
-          { period: bill.period, amount: bill.amount, durationMonths: 1, payment_method: 'QRIS Toko (Terverifikasi)' }
+          { name: bill.customer_name, pppoe_username: bill.pppoe_username, phone: bill.customer_phone, plan_name: bill.plan_name },
+          { period: alloc.periodLabel, amount: alloc.totalAmount, durationMonths: alloc.duration, payment_method: 'QRIS Toko (Terverifikasi)' }
         );
       } catch (errWa) {
         console.warn('[WhatsApp] Gagal kirim struk lunas ke pelanggan:', errWa.message);
       }
     }
 
-    res.json({ success: true, message: `Pembayaran ${bill.customer_name} berhasil disetujui & layanan MikroTik aktif!` });
+    res.json({ success: true, message: `Pembayaran ${bill.customer_name} (${alloc.duration} bulan: ${alloc.periodLabel}) disetujui & MikroTik aktif!` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -2355,9 +2511,10 @@ app.post('/api/admin/payments/:id/reject', requireAdminAuth, requireMikrotikConn
     const rejectReason = reason && reason.trim() ? reason.trim() : 'Bukti transfer tidak valid atau dana belum masuk.';
 
     const bill = db.prepare(`
-      SELECT b.*, c.name as customer_name, c.pppoe_username, c.phone as customer_phone
+      SELECT b.*, c.name as customer_name, c.pppoe_username, c.phone as customer_phone, p.price as plan_price
       FROM bills b
       JOIN customers c ON b.customer_id = c.id
+      LEFT JOIN plans p ON c.plan_id = p.id
       WHERE b.id = ?
     `).get(id);
 
@@ -2365,13 +2522,16 @@ app.post('/api/admin/payments/:id/reject', requireAdminAuth, requireMikrotikConn
       return res.status(404).json({ error: 'Tagihan tidak ditemukan' });
     }
 
-    // Kembalikan status bill ke unpaid
+    // Kembalikan status bill ke unpaid dan reset nominal per 1 bulan (anti perkalian ganda jika upload ulang!)
+    const resetAmount = bill.plan_price || Math.round(bill.amount / Math.max(1, bill.duration_months || 1)) || 100000;
     db.prepare(`
       UPDATE bills
       SET status = 'unpaid',
+          amount = ?,
+          duration_months = 1,
           rejection_reason = ?
       WHERE id = ?
-    `).run(rejectReason, id);
+    `).run(resetAmount, rejectReason, id);
 
     logActivity('PAYMENT', `Admin menolak bukti bayar ${bill.customer_name} (${rejectReason})`, bill.pppoe_username, 'failed');
 
@@ -2434,7 +2594,7 @@ const initialConnected = db.prepare("SELECT value FROM settings WHERE key = 'rou
 if (initialConnected === 'true') {
   syncFromMikrotik().then(async (res) => {
     console.log(`[Auto-Sync] Berhasil membaca ${res.count} secret dari MikroTik!`);
-    await runAutoIsolirCheck();
+    await runAutoIsolirCheck(null, { sendWa: false }); // Saat startup hanya cek isolir, jangan spam WA
   }).catch(err => {
     console.warn(`[Auto-Sync] Gagal membaca MikroTik saat start:`, err.message);
   });
@@ -2442,8 +2602,7 @@ if (initialConnected === 'true') {
   console.log(`[MikroTik] Status awal: Disconnected. Menunggu konfigurasi & koneksi dari Dashboard Admin.`);
 }
 
-// Background Auto-Sync 2-Arah (MikroTik -> SQLite) setiap 10 detik (Real-Time Sync)
-// Menjamin MikroTik tetap menjadi Single Source of Truth jika ada perubahan langsung via Winbox
+// Background Auto-Sync 2-Arah (MikroTik -> SQLite) setiap 20 detik (Hemat CPU Router & Flash eMMC STB)
 let isSyncing = false;
 setInterval(async () => {
   if (isSyncing) return;
@@ -2458,7 +2617,7 @@ setInterval(async () => {
   } finally {
     isSyncing = false;
   }
-}, 10 * 1000);
+}, 20 * 1000);
 
 // Jalankan Scheduler Cron Job
 startCronJobs();
@@ -2466,23 +2625,44 @@ startCronJobs();
 // Inisialisasi WhatsApp Gateway Bot
 initWhatsApp();
 
+const lanIp = getLocalLanIp();
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`=======================================================`);
   console.log(`🚀 LenxyNet Billing & ISP Management Running!`);
-  console.log(`🌐 Localhost (PC Ini)   : http://localhost:${PORT}`);
+  console.log(`🌐 Localhost (Server)   : http://localhost:${PORT}`);
   console.log(`📱 User Portal Localhost: http://localhost:${PORT}/user.html`);
   console.log(`-------------------------------------------------------`);
   console.log(`📡 Akses Jaringan Sama (HP / Laptop Pelanggan di WiFi/LAN):`);
-  console.log(`👉 Dashboard Admin : http://192.168.55.254:${PORT}`);
-  console.log(`👉 Portal Pelanggan: http://192.168.55.254:${PORT}/user.html`);
+  console.log(`👉 Dashboard Admin : http://${lanIp}:${PORT}`);
+  console.log(`👉 Portal Pelanggan: http://${lanIp}:${PORT}/user.html`);
   console.log(`=======================================================`);
 });
 
 // Dengarkan juga pada Port 80 standar jika tersedia (sehingga tidak perlu ketik :3000)
 try {
   app.listen(80, '0.0.0.0', () => {
-    console.log(`⚡ Port 80 Aktif: Akses langsung tanpa port di http://192.168.55.254/user.html`);
+    console.log(`⚡ Port 80 Aktif: Akses langsung tanpa port di http://${lanIp}/user.html`);
   }).on('error', () => {
-    // Port 80 dilewati jika ada service Windows lain yang menggunakannya
+    // Port 80 dilewati jika digunakan service lain atau tanpa hak root
   });
 } catch (e) {}
+
+// Global Error Guards & Graceful Shutdown (Anti-Crash 24/7 & Aman WAL SQLite saat restart PM2)
+process.on('unhandledRejection', (reason) => {
+  console.warn('[System Guard] Unhandled Rejection:', reason && reason.message ? reason.message : reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[System Guard] Uncaught Exception:', err.message);
+});
+
+function gracefulShutdown(signal) {
+  console.log(`\n[Shutdown] Menerima sinyal ${signal}. Menutup SQLite WAL dengan aman...`);
+  try {
+    db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    db.close();
+  } catch (e) {}
+  process.exit(0);
+}
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

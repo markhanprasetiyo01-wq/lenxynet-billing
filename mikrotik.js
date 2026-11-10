@@ -107,6 +107,40 @@ function parsePlanPrice(comment, name) {
   return 100000;
 }
 
+// Helper Normalisasi Nomor Telepon Lokal (Mengabaikan MAC Address yang ber-titik dua)
+function normalizePhoneLocal(phone) {
+  if (!phone || phone === '-') return '-';
+  const raw = String(phone).trim();
+  if (raw.includes(':')) return '-'; // MAC Address bukan nomor HP
+  let cleaned = raw.replace(/\D/g, '');
+  if (!cleaned || cleaned.length < 8) return '-';
+  if (cleaned.startsWith('62')) cleaned = '0' + cleaned.substring(2);
+  else if (cleaned.startsWith('8')) cleaned = '0' + cleaned;
+  return cleaned;
+}
+
+// Helper Tanggal Jatuh Tempo Efektif (mencegah bug tanggal 31 pada bulan pendek)
+function getEffectiveDueDate(year, month, configuredDueDate) {
+  const daysInMonth = new Date(year, month, 0).getDate();
+  return Math.min(configuredDueDate, daysInMonth);
+}
+
+// Helper Cek Keterlambatan Per Periode Tagihan (YYYY-MM) termasuk Masa Toleransi Lintas Bulan
+function isBillOverdueForPeriod(periodStr, dueDate, toleranceDays, todayTime) {
+  if (!periodStr || !dueDate) return false;
+  const parts = String(periodStr).split('-').map(Number);
+  if (parts.length !== 2 || isNaN(parts[0]) || isNaN(parts[1])) return false;
+  const [bYear, bMonth] = parts;
+  const effDay = getEffectiveDueDate(bYear, bMonth, dueDate);
+  const dueDt = new Date(bYear, bMonth - 1, effDay);
+  const deadlineDt = new Date(dueDt);
+  deadlineDt.setDate(deadlineDt.getDate() + toleranceDays);
+  return todayTime.getTime() > deadlineDt.getTime();
+}
+
+// Cache ringan Live Status MikroTik agar multiple tab admin tidak membanjiri API router
+let liveStatusCache = { data: [], updatedAt: 0 };
+
 function formatRosError(err, host = '', port = 8728) {
   let errCode = err.code || err.errno;
   if (typeof errCode === 'number') {
@@ -207,100 +241,111 @@ async function getMikrotikClient(customTimeout = 10) {
   }
 }
 
-// Sinkronisasi data dari MikroTik ke Database SQLite
+// Sinkronisasi data dari MikroTik ke Database SQLite (Hemat eMMC dengan Dirty-Check & Transaction)
 async function syncFromMikrotik() {
   let apiInstance = null;
+  let inTransaction = false;
   try {
-    const { api, client } = await getMikrotikClient();
+    const { api } = await getMikrotikClient();
     apiInstance = api;
 
-    // 1. Ambil semua Profile PPPoE dari MikroTik
-    const profiles = await client.menu('/ppp profile').get();
+    // 1. Ambil Profiles, Secrets, dan Active Sessions SEKALI SAJA via raw rosApi (presisi string terjaga & beban CPU router 50% lebih ringan)
+    const [profiles, rawSecrets, activeSessions] = await Promise.all([
+      api.rosApi.write(['/ppp/profile/print']),
+      api.rosApi.write(['/ppp/secret/print']),
+      api.rosApi.write(['/ppp/active/print'])
+    ]);
 
+    const activeUsernames = new Map(activeSessions.map(s => [s.name, s]));
+    const currentMikrotikUsernames = new Set(rawSecrets.map(s => s.name).filter(Boolean));
+    const toleranceDays = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'tolerance_days'").get()?.value || '3', 10);
+
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+    const currentDay = now.getDate();
+    const currentPeriod = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+    const todayTime = new Date(currentYear, currentMonth - 1, currentDay);
+
+    const callerIdsToClear = [];
+    const pendingMikrotikActions = [];
+    const liveStatusSnapshot = [];
+
+    db.exec('BEGIN IMMEDIATE');
+    inTransaction = true;
+
+    // A. Sinkronkan Profile PPPoE (dengan Dirty-Check)
     for (const p of profiles) {
-      if (p.name === 'default' || p.name === 'default-encryption') continue;
-      
-      const speed = p.rateLimit || 'Unlimited';
-      // Deteksi harga dinamis dari Comment MikroTik (misal: "100", "150", "200", "150k", "150.000") atau nama profile
+      if (!p.name || p.name === 'default' || p.name === 'default-encryption') continue;
+      const speed = p['rate-limit'] || 'Unlimited';
       const price = parsePlanPrice(p.comment, p.name);
 
-      // Cek apakah sudah ada plan dengan nama ini di SQLite
-      const existingPlan = db.prepare('SELECT id FROM plans WHERE name = ? OR profile = ?').get(p.name, p.name);
+      const existingPlan = db.prepare('SELECT id, name, profile, price, speed FROM plans WHERE name = ? OR profile = ?').get(p.name, p.name);
       if (!existingPlan) {
         db.prepare('INSERT INTO plans (name, profile, price, speed) VALUES (?, ?, ?, ?)').run(p.name, p.name, price, speed);
-      } else {
+      } else if (existingPlan.profile !== p.name || existingPlan.speed !== speed || existingPlan.price !== price) {
         db.prepare('UPDATE plans SET profile = ?, speed = ?, price = ? WHERE id = ?').run(p.name, speed, price, existingPlan.id);
       }
     }
 
-    // 2. Ambil semua PPP Secret dari MikroTik
-    const secrets = await client.menu('/ppp secret').get();
-    const activeSessions = await client.menu('/ppp active').get();
-    const activeUsernames = new Map(activeSessions.map(s => [s.name, s]));
-    const currentMikrotikUsernames = new Set(secrets.map(s => s.name));
-
-    // A. Hapus pelanggan di SQLite yang SUDAH TIDAK ADA di MikroTik
+    // B. Hapus pelanggan di SQLite yang SUDAH TIDAK ADA di MikroTik (Dengan Safety Guard anti-glitch router kosong)
     const existingDbCustomers = db.prepare('SELECT id, pppoe_username FROM customers').all();
-    let deletedCount = 0;
-    for (const dbCust of existingDbCustomers) {
-      if (!currentMikrotikUsernames.has(dbCust.pppoe_username)) {
-        console.log(`[Sync] Pelanggan '${dbCust.pppoe_username}' dihapus dari Database karena sudah tidak ada di MikroTik.`);
-        deleteCustomerLocalData(dbCust.id, dbCust.pppoe_username);
-        deletedCount++;
+    if (rawSecrets.length === 0 && existingDbCustomers.length > 0) {
+      console.warn('[Sync Safety] MikroTik mengembalikan 0 secret sementara DB punya pelanggan. Penghapusan otomatis dilewati.');
+    } else {
+      const missingCustomers = existingDbCustomers.filter(dbCust => !currentMikrotikUsernames.has(dbCust.pppoe_username));
+      if (existingDbCustomers.length >= 10 && missingCustomers.length > existingDbCustomers.length * 0.5) {
+        console.warn(`[Sync Safety] Terdeteksi ${missingCustomers.length}/${existingDbCustomers.length} pelanggan hilang mendadak! Penghapusan massal otomatis ditahan demi keamanan.`);
+      } else {
+        for (const dbCust of missingCustomers) {
+          console.log(`[Sync] Pelanggan '${dbCust.pppoe_username}' dihapus dari Database karena sudah tidak ada di MikroTik.`);
+          deleteCustomerLocalData(dbCust.id, dbCust.pppoe_username);
+        }
       }
     }
 
-    // Ambil data raw dari rosApi agar string '085...' tidak otomatis diubah menjadi angka 85...
-    const rawSecrets = await api.rosApi.write(['/ppp/secret/print']);
-    const secretsMap = new Map(rawSecrets.map(s => [s.name, s]));
+    // C. Masukkan atau update pelanggan yang ada di MikroTik (Hemat Disk Write: hanya UPDATE jika data berubah)
+    for (const rawS of rawSecrets) {
+      const username = rawS.name;
+      if (!username) continue;
 
-    // B. Masukkan atau update pelanggan yang ada di MikroTik
-    for (const s of secrets) {
-      const rawS = secretsMap.get(s.name) || {};
-      const username = s.name;
-      const password = String(s.password || '');
-      const profileName = s.profile || 'default';
-      const service = s.service || 'any';
-      const localAddress = s.localAddress || '';
-      const remoteAddress = s.remoteAddress || '';
-      const comment = s.comment || '';
-      // Prioritaskan string caller-id mentah dari MikroTik agar awalan 0 tidak hilang
-      let rawCaller = rawS['caller-id'] !== undefined ? String(rawS['caller-id']).trim() : '';
-      if (!rawCaller && s.callerId !== undefined && s.callerId !== null) {
-        rawCaller = String(s.callerId);
+      const secretId = rawS['.id'];
+      const password = String(rawS.password || '');
+      const profileName = rawS.profile || 'default';
+      const comment = rawS.comment !== undefined ? String(rawS.comment) : '';
+      const rawCaller = rawS['caller-id'] !== undefined ? String(rawS['caller-id']).trim() : '';
+
+      // Cek MAC Address dulu sebelum normalisasi nomor HP agar binding MAC teknisi tidak pernah terhapus!
+      const isMacBinding = rawCaller.includes(':');
+      const phoneFromCaller = isMacBinding ? '-' : normalizePhoneLocal(rawCaller);
+      if (!isMacBinding && phoneFromCaller !== '-' && secretId) {
+        // Jika caller-id terisi nomor HP (bukan MAC), jadwalkan pembersihan di MikroTik
+        callerIdsToClear.push(secretId);
       }
-      // Normalkan format nomor: pastikan selalu berawalan 08xxxxxxxxx
-      if (rawCaller && rawCaller !== '-') {
-        rawCaller = rawCaller.replace(/\D/g, '');
-        if (rawCaller.startsWith('62')) {
-          rawCaller = '0' + rawCaller.substring(2);
-        } else if (!rawCaller.startsWith('0')) {
-          rawCaller = '0' + rawCaller;
-        }
-      }
-      let phone = rawCaller || '-'; // No WA terhubung
-      if (rawCaller && !rawCaller.includes(':') && rawCaller.length >= 8) {
-        // Jika caller-id di MikroTik terisi nomor HP, bersihkan di MikroTik agar tidak memblokir MAC Address PPPoE
-        try {
-          const secretId = rawS['.id'] || s.id;
-          if (secretId) {
-            await api.rosApi.write(['/ppp/secret/set', '=.id=' + secretId, '=caller-id=']);
-          }
-        } catch (e) {}
-      }
-      const isDisabled = s.disabled === true || s.disabled === 'true';
+
+      const isDisabled = rawS.disabled === true || rawS.disabled === 'true';
       const status = isDisabled ? 'isolated' : 'active';
-      const activeSession = activeUsernames.get(username);
-      const isOnline = !!activeSession;
-      const uptime = activeSession ? activeSession.uptime : '';
+      const act = activeUsernames.get(username);
 
-      // Tgl Jatuh Tempo diambil dari Comment di MikroTik (format: DD-MM-YYYY atau angka tanggal)
-      // Jika comment di MikroTik kosong, dueDate bernilai null (Belum Diatur)
+      liveStatusSnapshot.push({
+        name: username,
+        service: rawS.service || 'pppoe',
+        profile: profileName,
+        localAddress: rawS['local-address'] || (act ? act.address : '-'),
+        remoteAddress: rawS['remote-address'] || (act ? act.address : '-'),
+        callerId: act ? (act['caller-id'] || '-') : (rawCaller || '-'),
+        uptime: act ? (act.uptime || '-') : '-',
+        disabled: isDisabled,
+        isOnline: !!act,
+        comment: comment
+      });
+
+      // Tgl Jatuh Tempo diambil dari Comment di MikroTik (DD-MM-YYYY atau angka tanggal)
       let dueDate = null;
       let fullDueYear = null;
       let fullDueMonth = null;
-      if (comment && String(comment).trim() !== '') {
-        const fullDateMatch = String(comment).trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (comment.trim() !== '') {
+        const fullDateMatch = comment.trim().match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
         if (fullDateMatch) {
           dueDate = parseInt(fullDateMatch[1], 10);
           fullDueMonth = parseInt(fullDateMatch[2], 10);
@@ -313,100 +358,136 @@ async function syncFromMikrotik() {
             const numMatch = comment.match(/\b(\d{1,2})\b/);
             if (numMatch) {
               const parsed = parseInt(numMatch[1], 10);
-              if (parsed >= 1 && parsed <= 31) {
-                dueDate = parsed;
-              }
+              if (parsed >= 1 && parsed <= 31) dueDate = parsed;
             }
           }
         }
       }
 
-      // Cari plan_id yang cocok
       const plan = db.prepare('SELECT id, price FROM plans WHERE name = ? OR profile = ?').get(profileName, profileName);
       const planId = plan ? plan.id : null;
       const planPrice = plan ? plan.price : 100000;
 
-      // Cek apakah pelanggan sudah ada di database
-      let customer = db.prepare('SELECT id, phone, name FROM customers WHERE pppoe_username = ?').get(username);
+      let customer = db.prepare('SELECT id, name, phone, pppoe_password, plan_id, due_date, status, comment FROM customers WHERE pppoe_username = ?').get(username);
       if (!customer) {
-        // Buat data pelanggan baru dari MikroTik (Pelanggan = Name di MikroTik, Phone = Caller ID)
         const info = db.prepare(`
           INSERT INTO customers (name, phone, pppoe_username, pppoe_password, plan_id, due_date, status, comment)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(username, phone, username, password, planId, dueDate, status, comment);
-        customer = { id: info.lastInsertRowid, phone: phone };
+        `).run(username, phoneFromCaller, username, password, planId, dueDate, status, comment);
+        customer = { id: info.lastInsertRowid, name: username, phone: phoneFromCaller, pppoe_password: password, plan_id: planId, due_date: dueDate, status, comment };
       } else {
-        // Update data jika sudah ada (Pertahankan nomor WA jika sudah ada di SQLite)
-        const finalPhone = (customer.phone && customer.phone !== '-') ? customer.phone : phone;
-        db.prepare(`
-          UPDATE customers 
-          SET name = ?, phone = ?, pppoe_password = ?, plan_id = ?, due_date = ?, status = ?, comment = ?
-          WHERE id = ?
-        `).run(username, finalPhone, password, planId, dueDate, status, comment, customer.id);
+        const finalPhone = (customer.phone && customer.phone !== '-') ? customer.phone : phoneFromCaller;
+        const hasChanged =
+          customer.name !== username ||
+          customer.phone !== finalPhone ||
+          customer.pppoe_password !== password ||
+          customer.plan_id !== planId ||
+          customer.due_date !== dueDate ||
+          customer.status !== status ||
+          (customer.comment || '') !== comment;
+
+        if (hasChanged) {
+          db.prepare(`
+            UPDATE customers 
+            SET name = ?, phone = ?, pppoe_password = ?, plan_id = ?, due_date = ?, status = ?, comment = ?
+            WHERE id = ?
+          `).run(username, finalPhone, password, planId, dueDate, status, comment, customer.id);
+          customer.status = status;
+        }
       }
 
-      // Pastikan ada tagihan untuk bulan berjalan (Dinamis: Tahun-Bulan saat ini)
-      const now = new Date();
-      const currentYear = now.getFullYear();
-      const currentMonth = now.getMonth() + 1;
-      const currentDay = now.getDate();
-      const currentPeriod = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
-
-      // Cek apakah pelanggan nunggak bulan lalu atau sudah lewat jatuh tempo bulan ini + masa toleransi
-      let isCustomerOverdue = false;
-      if (dueDate) {
-        const toleranceDays = parseInt(db.prepare("SELECT value FROM settings WHERE key = 'tolerance_days'").get()?.value || '1', 10);
-        const daysInMonth = new Date(currentYear, currentMonth, 0).getDate();
-        const effectiveDueDate = Math.min(dueDate, daysInMonth);
-        const dueDateTime = new Date(currentYear, currentMonth - 1, effectiveDueDate);
-        const deadlineTime = new Date(dueDateTime);
-        deadlineTime.setDate(deadlineTime.getDate() + toleranceDays);
-        const todayTime = new Date(currentYear, currentMonth - 1, currentDay);
-
-        // Cek apakah ada tunggakan tagihan dari bulan-bulan sebelumnya
-        const unpaidOldBill = db.prepare("SELECT id FROM bills WHERE customer_id = ? AND period < ? AND status = 'unpaid' LIMIT 1").get(customer.id, currentPeriod);
-
-        isCustomerOverdue = Boolean(unpaidOldBill) || (todayTime.getTime() > deadlineTime.getTime());
-      }
-
-      let bill = db.prepare('SELECT id, status, amount FROM bills WHERE customer_id = ? AND period = ?').get(customer.id, currentPeriod);
+      // Cek / Buat Tagihan Bulan Berjalan (Tagihan baru masuk bulan baru WAJIB 'unpaid'!)
+      let bill = db.prepare('SELECT id, status, amount, duration_months FROM bills WHERE customer_id = ? AND period = ?').get(customer.id, currentPeriod);
       if (!bill) {
-        // Tagihan baru dibuat sebagai 'unpaid' jika sudah lewat jatuh tempo atau MikroTik disabled, selain itu 'paid'
-        const billStatus = (isDisabled || isCustomerOverdue) ? 'unpaid' : 'paid';
+        let isFutureCommentPaid = false;
+        if (fullDueYear && fullDueMonth) {
+          const commentPeriod = `${fullDueYear}-${String(fullDueMonth).padStart(2, '0')}`;
+          if (commentPeriod > currentPeriod) {
+            isFutureCommentPaid = true;
+          }
+        }
+        const billStatus = isFutureCommentPaid ? 'paid' : 'unpaid';
         const infoBill = db.prepare(`
-          INSERT INTO bills (customer_id, period, amount, status)
-          VALUES (?, ?, ?, ?)
-        `).run(customer.id, currentPeriod, planPrice, billStatus);
-        bill = { id: infoBill.lastInsertRowid, status: billStatus, amount: planPrice };
-      } else if (bill.status === 'unpaid' && bill.amount !== planPrice) {
-        // Sinkronkan nominal tagihan berjalan yang belum dibayar dengan harga paket terbaru
+          INSERT INTO bills (customer_id, period, amount, status, paid_at, payment_method)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `).run(
+          customer.id,
+          currentPeriod,
+          planPrice,
+          billStatus,
+          isFutureCommentPaid ? db.prepare("SELECT datetime('now', 'localtime') as t").get().t : null,
+          isFutureCommentPaid ? 'Comment MikroTik' : null
+        );
+        bill = { id: infoBill.lastInsertRowid, status: billStatus, amount: planPrice, duration_months: 1 };
+      } else if (bill.status === 'unpaid' && bill.amount !== planPrice && (bill.duration_months || 1) === 1) {
         db.prepare('UPDATE bills SET amount = ? WHERE id = ?').run(planPrice, bill.id);
         bill.amount = planPrice;
       }
 
+      // Cek keterlambatan lintas bulan per tagihan (mempertahankan masa toleransi tgl 28-31!)
+      let hasOverdueUnpaid = false;
+      if (dueDate) {
+        const unpaidBills = db.prepare("SELECT id, period FROM bills WHERE customer_id = ? AND status = 'unpaid'").all(customer.id);
+        hasOverdueUnpaid = unpaidBills.some(ub => isBillOverdueForPeriod(ub.period, dueDate, toleranceDays, todayTime));
+      }
+
+      const pendingBill = db.prepare("SELECT id FROM bills WHERE customer_id = ? AND status = 'pending_verification' LIMIT 1").get(customer.id);
+
       // KONSISTENSI DATA DATABASE VS MIKROTIK:
-      // 1. Jika tagihan belum bayar & sudah lewat jatuh tempo + toleransi -> WAJIB TERISOLIR
-      if (bill.status === 'unpaid' && isCustomerOverdue) {
-        db.prepare("UPDATE customers SET status = 'isolated' WHERE id = ?").run(customer.id);
-        if (!isDisabled) {
-          // Jika di MikroTik masih menyala, matikan seketika dan putus sesi aktif
-          setMikrotikSecretStatus(username, false).catch(e => {
-            console.warn(`[Sync Enforce Isolir] Gagal matikan MikroTik untuk ${username}:`, e.message);
-          });
+      // 1. Jika ada tagihan belum bayar & sudah lewat jatuh tempo + toleransi (dan tidak sedang review bukti baru jika masih aktif) -> WAJIB TERISOLIR
+      if (hasOverdueUnpaid && !pendingBill) {
+        if (customer.status !== 'isolated') {
+          db.prepare("UPDATE customers SET status = 'isolated' WHERE id = ?").run(customer.id);
         }
-      } else if (bill.status === 'paid' && isDisabled) {
-        // 2. Jika tagihan sudah lunas tetapi di MikroTik masih disabled -> Pulihkan / Buka isolir
-        db.prepare("UPDATE customers SET status = 'active' WHERE id = ?").run(customer.id);
-        setMikrotikSecretStatus(username, true).catch(e => {
-          console.warn(`[Sync Enforce Unisolir] Gagal aktifkan MikroTik untuk ${username}:`, e.message);
-        });
+        if (!isDisabled && secretId) {
+          pendingMikrotikActions.push({ username, secretId, enable: false });
+        }
+      } else if (!hasOverdueUnpaid && bill.status === 'paid' && isDisabled && customer.status === 'active' && secretId) {
+        // 2. Self-healing jika approve gagal buka isolir karena router sempat offline
+        pendingMikrotikActions.push({ username, secretId, enable: true });
+      }
+    }
+
+    db.exec('COMMIT');
+    inTransaction = false;
+
+    // Update live cache
+    liveStatusCache = { data: liveStatusSnapshot, updatedAt: Date.now() };
+
+    // D. Eksekusi perintah MikroTik yang tertunda secara berurutan pada koneksi yang sama
+    for (const cid of callerIdsToClear) {
+      try {
+        await api.rosApi.write(['/ppp/secret/set', '=.id=' + cid, '=caller-id=']);
+      } catch (e) {}
+    }
+
+    for (const act of pendingMikrotikActions) {
+      try {
+        if (act.enable) {
+          await api.rosApi.write(['/ppp/secret/enable', '=.id=' + act.secretId]);
+          console.log(`[Sync Self-Heal] Secret '${act.username}' diaktifkan kembali di MikroTik.`);
+        } else {
+          await api.rosApi.write(['/ppp/secret/disable', '=.id=' + act.secretId]);
+          const activeToKick = activeSessions.filter(a => a.name === act.username);
+          for (const sess of activeToKick) {
+            if (sess['.id']) {
+              await api.rosApi.write(['/ppp/active/remove', '=.id=' + sess['.id']]);
+            }
+          }
+          console.log(`[Sync Enforce Isolir] Secret '${act.username}' dinonaktifkan & sesi aktif diputus di MikroTik.`);
+        }
+      } catch (e) {
+        console.warn(`[Sync Action Error] '${act.username}':`, e.message);
       }
     }
 
     apiInstance.close();
-    return { success: true, count: secrets.length };
+    return { success: true, count: rawSecrets.length };
   } catch (err) {
-    if (apiInstance) apiInstance.close();
+    if (inTransaction) {
+      try { db.exec('ROLLBACK'); } catch (e) {}
+    }
+    if (apiInstance) try { apiInstance.close(); } catch (e) {}
     console.error('Error syncing with MikroTik:', err.message);
     throw err;
   }
@@ -454,10 +535,11 @@ async function setMikrotikSecretStatus(username, enable) {
       }
     }
 
+    liveStatusCache.updatedAt = 0;
     apiInstance.close();
     return { success: true };
   } catch (err) {
-    if (apiInstance) apiInstance.close();
+    if (apiInstance) try { apiInstance.close(); } catch (e) {}
     console.error('Error setting MikroTik secret status:', err.message);
     throw err;
   }
@@ -503,27 +585,29 @@ async function addCustomerToMikrotik({ name, password, profile, phone, dueDate, 
     const planId = plan ? plan.id : null;
     const planPrice = plan ? plan.price : 150000;
 
-    // 3. Simpan ke SQLite (Status sesuai pembayaran awal)
+    // 3. Simpan ke SQLite (Status sesuai pembayaran awal + comment & nomor WA ternormalisasi)
+    const normalizedPhone = normalizePhoneLocal(phone);
     const info = db.prepare(`
-      INSERT INTO customers (name, phone, pppoe_username, pppoe_password, plan_id, due_date, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(name, phone ? String(phone).trim() : '-', name, password, planId, dueDate || 10, status);
+      INSERT INTO customers (name, phone, pppoe_username, pppoe_password, plan_id, due_date, status, comment)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(name, normalizedPhone, name, password, planId, dueDate || 10, status, formattedComment);
 
     // Buat tagihan bulan berjalan (status: paid atau unpaid)
     const nowTime = new Date();
     const curPeriodKey = `${nowTime.getFullYear()}-${String(nowTime.getMonth() + 1).padStart(2, '0')}`;
-    db.prepare(`
-      INSERT INTO bills (customer_id, period, amount, status, paid_at, payment_method)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      info.lastInsertRowid, 
-      curPeriodKey,
-      planPrice, 
-      isPaid ? 'paid' : 'unpaid', 
-      isPaid ? new Date().toISOString() : null, 
-      isPaid ? 'Manual Kasir' : null
-    );
+    if (isPaid) {
+      db.prepare(`
+        INSERT INTO bills (customer_id, period, amount, status, paid_at, payment_method)
+        VALUES (?, ?, ?, 'paid', datetime('now', 'localtime'), 'Manual Kasir')
+      `).run(info.lastInsertRowid, curPeriodKey, planPrice);
+    } else {
+      db.prepare(`
+        INSERT INTO bills (customer_id, period, amount, status)
+        VALUES (?, ?, ?, 'unpaid')
+      `).run(info.lastInsertRowid, curPeriodKey, planPrice);
+    }
 
+    liveStatusCache.updatedAt = 0;
     apiInstance.close();
     return { success: true };
   } catch (err) {
@@ -578,54 +662,53 @@ async function removeCustomerFromMikrotik(username, id) {
   return { success: true, mikrotikSuccess, warning: mikrotikWarning };
 }
 
-// Ambil Status Real-Time Detail dari MikroTik untuk Semua Pelanggan
-async function getMikrotikLiveStatus() {
+// Ambil Status Real-Time Detail dari MikroTik untuk Semua Pelanggan (Dengan 4s Cache & Single Fetch)
+async function getMikrotikLiveStatus(forceRefresh = false) {
   const config = getRouterConfig();
   if (!config.isConnected || !config.host) {
     return [];
   }
+  if (!forceRefresh && liveStatusCache.data.length > 0 && (Date.now() - liveStatusCache.updatedAt) < 4000) {
+    return liveStatusCache.data;
+  }
   let apiInstance = null;
   try {
-    const { api, client } = await getMikrotikClient(3);
+    const { api } = await getMikrotikClient(3);
     apiInstance = api;
 
-    const secrets = await client.menu('/ppp secret').get();
-    const rawSecrets = await api.rosApi.write(['/ppp/secret/print']);
-    const rawMap = new Map(rawSecrets.map(s => [s.name, s]));
-
-    const active = await client.menu('/ppp active').get();
+    const [rawSecrets, active] = await Promise.all([
+      api.rosApi.write(['/ppp/secret/print']),
+      api.rosApi.write(['/ppp/active/print'])
+    ]);
     const activeMap = new Map(active.map(a => [a.name, a]));
 
-    const result = secrets.map(s => {
-      const act = activeMap.get(s.name);
-      const raw = rawMap.get(s.name) || {};
-      let callerIdDisplay = act ? act.callerId : (raw['caller-id'] || s.callerId || '-');
-      if (callerIdDisplay && callerIdDisplay !== '-' && typeof callerIdDisplay === 'number') {
-        callerIdDisplay = '0' + callerIdDisplay;
-      }
+    const result = rawSecrets.map(raw => {
+      const act = activeMap.get(raw.name);
+      const rawCaller = raw['caller-id'] !== undefined ? String(raw['caller-id']).trim() : '';
+      const callerIdDisplay = act ? (act['caller-id'] || '-') : (rawCaller || '-');
       return {
-        name: s.name,
-        service: s.service,
-        profile: s.profile,
-        localAddress: s.localAddress || (act ? act.address : '-'),
-        remoteAddress: s.remoteAddress || (act ? act.address : '-'),
+        name: raw.name,
+        service: raw.service || 'pppoe',
+        profile: raw.profile || 'default',
+        localAddress: raw['local-address'] || (act ? act.address : '-'),
+        remoteAddress: raw['remote-address'] || (act ? act.address : '-'),
         callerId: callerIdDisplay,
-        uptime: act ? act.uptime : '-',
-        disabled: s.disabled === true || s.disabled === 'true',
+        uptime: act ? (act.uptime || '-') : '-',
+        disabled: raw.disabled === true || raw.disabled === 'true',
         isOnline: !!act,
-        comment: s.comment || ''
+        comment: raw.comment || ''
       };
     });
 
+    liveStatusCache = { data: result, updatedAt: Date.now() };
     apiInstance.close();
     return result;
   } catch (err) {
-    if (apiInstance) apiInstance.close();
+    if (apiInstance) try { apiInstance.close(); } catch (e) {}
     throw err;
   }
 }
 
-// Update Nomor WA Pelanggan (Caller ID di MikroTik)
 // Update No HP Pelanggan di SQLite (dan bersihkan caller-id di MikroTik jika sebelumnya terisi no HP)
 async function updateCustomerPhoneInMikrotik(username, phone) {
   let apiInstance = null;
@@ -642,13 +725,15 @@ async function updateCustomerPhoneInMikrotik(username, phone) {
       await api.rosApi.write(['/ppp/secret/set', '=.id=' + targetId, '=caller-id=']);
     }
 
-    // Update SQLite
-    db.prepare('UPDATE customers SET phone = ? WHERE pppoe_username = ?').run(String(phone).trim(), username);
+    // Update SQLite dengan nomor ternormalisasi
+    const normalized = normalizePhoneLocal(phone);
+    db.prepare('UPDATE customers SET phone = ? WHERE pppoe_username = ?').run(normalized, username);
 
+    liveStatusCache.updatedAt = 0;
     apiInstance.close();
     return { success: true };
   } catch (err) {
-    if (apiInstance) apiInstance.close();
+    if (apiInstance) try { apiInstance.close(); } catch (e) {}
     throw err;
   }
 }
@@ -685,12 +770,14 @@ async function updateCustomerDueDateInMikrotik(username, newDueDate) {
         newComment = `${padDay}-${month}-${year}`;
       }
 
-      await api.rosApi.write(['/ppp/secret/set', '=.id=' + target.id, '=comment=' + newComment]);
+      const targetId = target['.id'] || target.id;
+      await api.rosApi.write(['/ppp/secret/set', '=.id=' + targetId, '=comment=' + newComment]);
     }
 
     // Update SQLite database
-    db.prepare('UPDATE customers SET due_date = ? WHERE pppoe_username = ?').run(numDueDate, username);
+    db.prepare('UPDATE customers SET due_date = ?, comment = COALESCE(comment, ?) WHERE pppoe_username = ?').run(numDueDate, String(numDueDate), username);
 
+    liveStatusCache.updatedAt = 0;
     apiInstance.close();
     return { success: true, dueDate: numDueDate };
   } catch (err) {
@@ -713,7 +800,8 @@ async function updateCustomerInMikrotik(username, { dueDate, phone, password, pr
       throw new Error(`Pelanggan '${username}' tidak ditemukan di MikroTik!`);
     }
 
-    const rosCmd = ['/ppp/secret/set', '=.id=' + target.id];
+    const targetId = target['.id'] || target.id;
+    const rosCmd = ['/ppp/secret/set', '=.id=' + targetId];
     let numDueDate = null;
 
     if (dueDate !== undefined && dueDate !== null && dueDate !== '') {
@@ -763,7 +851,7 @@ async function updateCustomerInMikrotik(username, { dueDate, phone, password, pr
     }
     if (phone !== undefined) {
       updates.push('phone = ?');
-      params.push(String(phone || '').trim() || '-');
+      params.push(normalizePhoneLocal(phone));
     }
     if (password) {
       updates.push('pppoe_password = ?');
@@ -779,7 +867,7 @@ async function updateCustomerInMikrotik(username, { dueDate, phone, password, pr
         const curPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
         const cust = db.prepare('SELECT id FROM customers WHERE pppoe_username = ?').get(username);
         if (cust) {
-          db.prepare("UPDATE bills SET amount = ? WHERE customer_id = ? AND period = ? AND status = 'unpaid'")
+          db.prepare("UPDATE bills SET amount = ?, duration_months = 1 WHERE customer_id = ? AND period = ? AND status = 'unpaid'")
             .run(plan.price, cust.id, curPeriod);
         }
       }
@@ -790,6 +878,7 @@ async function updateCustomerInMikrotik(username, { dueDate, phone, password, pr
       db.prepare(`UPDATE customers SET ${updates.join(', ')} WHERE pppoe_username = ?`).run(...params);
     }
 
+    liveStatusCache.updatedAt = 0;
     apiInstance.close();
     return { success: true };
   } catch (err) {
@@ -877,5 +966,8 @@ module.exports = {
   getMikrotikTraffic,
   getMikrotikActiveSessions,
   getRouterConfig,
-  parsePlanPrice
+  parsePlanPrice,
+  normalizePhoneLocal,
+  getEffectiveDueDate,
+  isBillOverdueForPeriod
 };
