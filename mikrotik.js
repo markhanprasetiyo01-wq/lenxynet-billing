@@ -545,8 +545,295 @@ async function setMikrotikSecretStatus(username, enable) {
   }
 }
 
+/** Parse DMS (e.g. 6°53'53.8"S 108°59'30.2"E) to decimal lat/lng. */
+function parseDmsCoordinates(text) {
+  const dmsRegex = /(\d{1,3})\s*[°º]\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:\.\d+)?)\s*(?:["″]|'')?\s*([NSEW])/gi;
+  const matches = [...String(text || '').matchAll(dmsRegex)];
+  if (matches.length < 2) return null;
+
+  let lat = null;
+  let lng = null;
+  for (const m of matches) {
+    const val = Number(m[1]) + Number(m[2]) / 60 + Number(m[3]) / 3600;
+    const dir = m[4].toUpperCase();
+    const signed = (dir === 'S' || dir === 'W') ? -val : val;
+    if ((dir === 'N' || dir === 'S') && lat === null) lat = signed;
+    else if ((dir === 'E' || dir === 'W') && lng === null) lng = signed;
+  }
+  if (lat === null || lng === null) return null;
+  if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+    return null;
+  }
+  return {
+    latitude: Math.round(lat * 1e6) / 1e6,
+    longitude: Math.round(lng * 1e6) / 1e6
+  };
+}
+
+/** Extract coordinates from raw coordinates, DMS, WhatsApp share text, or full Map URLs. */
+function extractCoordsFromText(raw) {
+  const input = String(raw || '').trim();
+  if (!input) return null;
+
+  let decoded = input;
+  try {
+    decoded = decodeURIComponent(input.replace(/\+/g, ' '));
+  } catch (e) {}
+
+  const candidates = decoded !== input ? [decoded, input] : [input];
+  const round6 = (n) => Math.round(n * 1e6) / 1e6;
+  const buildIfValid = (latStr, lngStr) => {
+    const lat = Number(latStr);
+    const lng = Number(lngStr);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+    return { latitude: round6(lat), longitude: round6(lng) };
+  };
+
+  for (const text of candidates) {
+    // 1. Google Maps exact pin (!3dLAT!4dLNG)
+    const pinMatch = text.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/);
+    if (pinMatch) {
+      const res = buildIfValid(pinMatch[1], pinMatch[2]);
+      if (res) return res;
+    }
+
+    // 2. Query params: ?q=, ?ll=, ?sll=, ?center=, ?query=, ?destination=, ?origin=, ?cp= (Google/WA/Apple/Waze/Bing)
+    const qpMatch = text.match(/(?:[?&](?:q|ll|sll|center|query|destination|origin|cp)=)(-?\d{1,2}\.\d+)\s*[,;\s~_]+\s*(-?\d{1,3}\.\d+)/i);
+    if (qpMatch) {
+      const res = buildIfValid(qpMatch[1], qpMatch[2]);
+      if (res) return res;
+    }
+
+    // 3. OpenStreetMap mlat/mlon & #map=zoom/lat/lng
+    const osmMatch =
+      text.match(/[?&]mlat=(-?\d{1,2}\.\d+)[^#\s]*[?&]mlon=(-?\d{1,3}\.\d+)/i) ||
+      text.match(/#map=\d+(?:\.\d+)?\/(-?\d{1,2}\.\d+)\/(-?\d{1,3}\.\d+)/i);
+    if (osmMatch) {
+      const res = buildIfValid(osmMatch[1], osmMatch[2]);
+      if (res) return res;
+    }
+
+    // 4. Google Maps @lat,lng or geo:lat,lng URI
+    const atOrGeoMatch =
+      text.match(/@(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/) ||
+      text.match(/geo:(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/i);
+    if (atOrGeoMatch) {
+      const res = buildIfValid(atOrGeoMatch[1], atOrGeoMatch[2]);
+      if (res) return res;
+    }
+
+    // 5. DMS coordinates
+    const dmsRes = parseDmsCoordinates(text);
+    if (dmsRes) return dmsRes;
+  }
+
+  // 6. Plain coordinate pair inside pasted text (e.g. "-6.898264, 108.991725")
+  const decPair = input.match(/(-?\d{1,2}\.\d+)\s*[,;\s]\s*(-?\d{1,3}\.\d+)/);
+  if (decPair) {
+    const res = buildIfValid(decPair[1], decPair[2]);
+    if (res) return res;
+  }
+  const intPair = input.match(/(-?\d{1,2}(?:\.\d+)?)\s*[,;]\s*(-?\d{1,3}(?:\.\d+)?)/);
+  if (intPair) {
+    const res = buildIfValid(intPair[1], intPair[2]);
+    if (res) return res;
+  }
+
+  return null;
+}
+
+/** Extract clean readable place/street name from Google Maps /place/... redirect URL if present. */
+function extractPlaceNameFromMapUrl(urlStr) {
+  const m = String(urlStr || '').match(/\/maps\/place\/([^/@?]+)/i);
+  if (!m) return '';
+  try {
+    let name = decodeURIComponent(m[1].replace(/\+/g, ' ')).trim();
+    // Hapus awalan Google Plus Code bila diikuti nama lokasi yang lebih lengkap (mis. "4X2R+JQW Nama Tempat...")
+    name = name.replace(/^[A-Z0-9]{4,8}\+[A-Z0-9]{2,4}\s+/i, '').trim();
+    if (/^-?\d+(\.\d+)?[,;\s]+-?\d+(\.\d+)?$/.test(name)) return '';
+    return name.slice(0, 450);
+  } catch (e) {
+    return '';
+  }
+}
+
+/** Allow only trusted public map / shortlink hosts to prevent SSRF against internal network IPs. */
+function isAllowedMapHostname(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  if (!h || h === 'localhost' || /^(\d{1,3}\.){3}\d{1,3}$/.test(h) || h.includes(':')) return false;
+  return (
+    h === 'maps.app.goo.gl' ||
+    h === 'goo.gl' ||
+    h === 'g.co' ||
+    h === 'share.google' ||
+    h === 'maps.apple.com' ||
+    h === 'osm.org' ||
+    h === 'openstreetmap.org' ||
+    h === 'www.openstreetmap.org' ||
+    h === 'waze.com' ||
+    h === 'www.waze.com' ||
+    h === 'ul.waze.com' ||
+    h === 'bing.com' ||
+    h === 'www.bing.com' ||
+    /^(?:www\.|maps\.)?google\.[a-z.]{2,10}$/.test(h)
+  );
+}
+
+/** Resolve direct coordinates, full map URLs, WhatsApp share messages, or short map links (maps.app.goo.gl, goo.gl/maps, osm.org). */
+async function resolveMapLocationInput(rawInput) {
+  const text = String(rawInput || '').trim();
+  if (!text) {
+    throw new Error('Link atau koordinat lokasi tidak boleh kosong.');
+  }
+
+  // 1. Cek dulu bila koordinat sudah ada langsung di teks/link tanpa perlu koneksi keluar
+  const urlInText = text.match(/https?:\/\/[^\s"'<>]+/i)?.[0] || '';
+  const directCoords = extractCoordsFromText(text);
+  if (directCoords) {
+    return {
+      latitude: directCoords.latitude,
+      longitude: directCoords.longitude,
+      placeName: extractPlaceNameFromMapUrl(urlInText || text),
+      resolvedUrl: urlInText || text
+    };
+  }
+
+  if (!urlInText) {
+    throw new Error('Koordinat tidak dikenali. Masukkan angka lat, lng atau link lokasi Google Maps / WhatsApp.');
+  }
+
+  let currentUrl;
+  try {
+    currentUrl = new URL(urlInText);
+  } catch (e) {
+    throw new Error('Format link peta tidak valid.');
+  }
+
+  if (!['https:', 'http:'].includes(currentUrl.protocol) || !isAllowedMapHostname(currentUrl.hostname)) {
+    throw new Error(`Domain link '${currentUrl.hostname}' tidak didukung. Gunakan link Google Maps, Apple Maps, OSM, atau Waze.`);
+  }
+
+  // 2. Ikuti redirect shortlink dengan aman (maks 6 hop, timeout 6 detik)
+  let placeName = '';
+  let lastBody = '';
+  let lastFinalUrl = currentUrl.toString();
+
+  for (let hop = 0; hop < 6; hop++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    let res;
+    try {
+      res = await fetch(currentUrl.toString(), {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const locHeader = res.headers.get('location');
+    if (res.status >= 300 && res.status < 400 && locHeader) {
+      const nextUrl = new URL(locHeader, currentUrl);
+      if (!['https:', 'http:'].includes(nextUrl.protocol) || !isAllowedMapHostname(nextUrl.hostname)) {
+        throw new Error('Redirect link menuju domain yang tidak didukung.');
+      }
+      const nextStr = nextUrl.toString();
+      if (!placeName) placeName = extractPlaceNameFromMapUrl(nextStr);
+
+      const hopCoords = extractCoordsFromText(nextStr);
+      if (hopCoords) {
+        return {
+          latitude: hopCoords.latitude,
+          longitude: hopCoords.longitude,
+          placeName,
+          resolvedUrl: nextStr
+        };
+      }
+      currentUrl = nextUrl;
+      lastFinalUrl = nextStr;
+      continue;
+    }
+
+    // 200 OK atau respons akhir: baca sebagian body untuk ekstraksi koordinat dari HTML/meta
+    const ct = res.headers.get('content-type') || '';
+    if (ct.includes('text/') || ct.includes('html') || ct.includes('json')) {
+      const rawText = await res.text();
+      lastBody = rawText.slice(0, 260000);
+    }
+    break;
+  }
+
+  // Cek ulang URL terakhir & potongan HTML (staticmap center, !3d!4d, meta canonical)
+  const finalUrlCoords = extractCoordsFromText(lastFinalUrl);
+  if (finalUrlCoords) {
+    return {
+      latitude: finalUrlCoords.latitude,
+      longitude: finalUrlCoords.longitude,
+      placeName: placeName || extractPlaceNameFromMapUrl(lastFinalUrl),
+      resolvedUrl: lastFinalUrl
+    };
+  }
+
+  if (lastBody) {
+    const bodyPin =
+      lastBody.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/) ||
+      lastBody.match(/staticmap\?center=(-?\d{1,2}\.\d+)(?:,|%2C)(-?\d{1,3}\.\d+)/i) ||
+      lastBody.match(/\[null,null,(-?\d{1,2}\.\d{5,}),(-?\d{1,3}\.\d{5,})\]/);
+    if (bodyPin) {
+      const lat = Number(bodyPin[1]);
+      const lng = Number(bodyPin[2]);
+      if (Number.isFinite(lat) && lat >= -90 && lat <= 90 && Number.isFinite(lng) && lng >= -180 && lng <= 180) {
+        return {
+          latitude: Math.round(lat * 1e6) / 1e6,
+          longitude: Math.round(lng * 1e6) / 1e6,
+          placeName: placeName || extractPlaceNameFromMapUrl(lastFinalUrl),
+          resolvedUrl: lastFinalUrl
+        };
+      }
+    }
+  }
+
+  throw new Error('Tidak dapat menemukan titik koordinat dari link tersebut. Coba buka linknya di browser lalu copy link/koordinatnya.');
+}
+
+/** Parse and validate optional customer address and GPS coordinates. */
+function parseLocationFields({ address, latitude, longitude } = {}) {
+  const result = {};
+  if (address !== undefined) {
+    result.address = String(address === null ? '' : address).trim().slice(0, 500);
+  }
+
+  const hasLatInput = latitude !== undefined;
+  const hasLngInput = longitude !== undefined;
+  if (hasLatInput || hasLngInput) {
+    const emptyLat = latitude === null || latitude === '';
+    const emptyLng = longitude === null || longitude === '';
+    if (emptyLat && emptyLng) {
+      result.latitude = null;
+      result.longitude = null;
+    } else if (emptyLat || emptyLng) {
+      throw new Error('Koordinat Latitude dan Longitude harus diisi keduanya (atau dikosongkan keduanya).');
+    } else {
+      const lat = Number(latitude);
+      const lng = Number(longitude);
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180) {
+        throw new Error('Koordinat titik lokasi tidak valid (Latitude harus -90..90 dan Longitude -180..180).');
+      }
+      result.latitude = Math.round(lat * 1e6) / 1e6;
+      result.longitude = Math.round(lng * 1e6) / 1e6;
+    }
+  }
+  return result;
+}
+
 // Tambah Pelanggan Baru (Input via Web App -> Kirim ke MikroTik & Simpan ke SQLite)
-async function addCustomerToMikrotik({ name, password, profile, phone, dueDate, comment, initialPayment }) {
+async function addCustomerToMikrotik({ name, password, profile, phone, dueDate, comment, initialPayment, address, latitude, longitude }) {
+  const loc = parseLocationFields({ address, latitude, longitude });
   let apiInstance = null;
   try {
     const { api, client } = await getMikrotikClient();
@@ -588,9 +875,21 @@ async function addCustomerToMikrotik({ name, password, profile, phone, dueDate, 
     // 3. Simpan ke SQLite (Status sesuai pembayaran awal + comment & nomor WA ternormalisasi)
     const normalizedPhone = normalizePhoneLocal(phone);
     const info = db.prepare(`
-      INSERT INTO customers (name, phone, pppoe_username, pppoe_password, plan_id, due_date, status, comment)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(name, normalizedPhone, name, password, planId, dueDate || 10, status, formattedComment);
+      INSERT INTO customers (name, phone, pppoe_username, pppoe_password, plan_id, due_date, status, comment, address, latitude, longitude)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      name,
+      normalizedPhone,
+      name,
+      password,
+      planId,
+      dueDate || 10,
+      status,
+      formattedComment,
+      loc.address !== undefined ? loc.address : '',
+      loc.latitude !== undefined ? loc.latitude : null,
+      loc.longitude !== undefined ? loc.longitude : null
+    );
 
     // Buat tagihan bulan berjalan (status: paid atau unpaid)
     const nowTime = new Date();
@@ -786,60 +1085,72 @@ async function updateCustomerDueDateInMikrotik(username, newDueDate) {
   }
 }
 
-// Update Data Pelanggan Lengkap (Jatuh Tempo, WA, Password, Profile Paket)
-async function updateCustomerInMikrotik(username, { dueDate, phone, password, profile }) {
+// Update Data Pelanggan Lengkap (Jatuh Tempo, WA, Password, Profile Paket, Alamat & Koordinat Map)
+async function updateCustomerInMikrotik(username, { dueDate, phone, password, profile, address, latitude, longitude }) {
+  const loc = parseLocationFields({ address, latitude, longitude });
+  const needsMikrotik =
+    (dueDate !== undefined && dueDate !== null && dueDate !== '') ||
+    phone !== undefined ||
+    Boolean(password) ||
+    Boolean(profile);
+
   let apiInstance = null;
   try {
-    const { api, client } = await getMikrotikClient();
-    apiInstance = api;
-
-    const secretMenu = client.menu('/ppp secret');
-    const secrets = await secretMenu.get();
-    const target = secrets.find(s => s.name === username);
-    if (!target) {
-      throw new Error(`Pelanggan '${username}' tidak ditemukan di MikroTik!`);
-    }
-
-    const targetId = target['.id'] || target.id;
-    const rosCmd = ['/ppp/secret/set', '=.id=' + targetId];
     let numDueDate = null;
 
-    if (dueDate !== undefined && dueDate !== null && dueDate !== '') {
-      numDueDate = parseInt(dueDate, 10);
-      if (isNaN(numDueDate) || numDueDate < 1 || numDueDate > 31) {
-        throw new Error('Tanggal jatuh tempo harus antara 1 sampai 31!');
+    if (needsMikrotik) {
+      const { api, client } = await getMikrotikClient();
+      apiInstance = api;
+
+      const secretMenu = client.menu('/ppp secret');
+      const secrets = await secretMenu.get();
+      const target = secrets.find(s => s.name === username);
+      if (!target) {
+        throw new Error(`Pelanggan '${username}' tidak ditemukan di MikroTik!`);
       }
-      const padDay = String(numDueDate).padStart(2, '0');
-      let newComment = '';
-      const existingComment = target.comment || '';
-      if (existingComment.match(/^(\d{1,2})([-/.])(.*)/)) {
-        newComment = existingComment.replace(/^(\d{1,2})([-/.])(.*)/, `${padDay}$2$3`);
-      } else if (existingComment) {
-        newComment = `${padDay} - ${existingComment}`;
-      } else {
-        const now = new Date();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const year = now.getFullYear();
-        newComment = `${padDay}-${month}-${year}`;
+
+      const targetId = target['.id'] || target.id;
+      const rosCmd = ['/ppp/secret/set', '=.id=' + targetId];
+
+      if (dueDate !== undefined && dueDate !== null && dueDate !== '') {
+        numDueDate = parseInt(dueDate, 10);
+        if (isNaN(numDueDate) || numDueDate < 1 || numDueDate > 31) {
+          throw new Error('Tanggal jatuh tempo harus antara 1 sampai 31!');
+        }
+        const padDay = String(numDueDate).padStart(2, '0');
+        let newComment = '';
+        const existingComment = target.comment || '';
+        if (existingComment.match(/^(\d{1,2})([-/.])(.*)/)) {
+          newComment = existingComment.replace(/^(\d{1,2})([-/.])(.*)/, `${padDay}$2$3`);
+        } else if (existingComment) {
+          newComment = `${padDay} - ${existingComment}`;
+        } else {
+          const now = new Date();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const year = now.getFullYear();
+          newComment = `${padDay}-${month}-${year}`;
+        }
+        rosCmd.push('=comment=' + newComment);
       }
-      rosCmd.push('=comment=' + newComment);
-    }
 
-    if (phone !== undefined) {
-      // Pastikan caller-id di MikroTik tetap kosong agar autentikasi MAC PPPoE tidak tertolak
-      rosCmd.push('=caller-id=');
-    }
+      if (phone !== undefined) {
+        // Pastikan caller-id di MikroTik tetap kosong agar autentikasi MAC PPPoE tidak tertolak
+        rosCmd.push('=caller-id=');
+      }
 
-    if (password) {
-      rosCmd.push('=password=' + String(password).trim());
-    }
+      if (password) {
+        rosCmd.push('=password=' + String(password).trim());
+      }
 
-    if (profile) {
-      rosCmd.push('=profile=' + String(profile).trim());
-    }
+      if (profile) {
+        rosCmd.push('=profile=' + String(profile).trim());
+      }
 
-    // Kirim update ke MikroTik
-    await api.rosApi.write(rosCmd);
+      // Kirim update ke MikroTik
+      if (rosCmd.length > 2) {
+        await api.rosApi.write(rosCmd);
+      }
+    }
 
     // Update SQLite database
     const updates = [];
@@ -856,6 +1167,16 @@ async function updateCustomerInMikrotik(username, { dueDate, phone, password, pr
     if (password) {
       updates.push('pppoe_password = ?');
       params.push(String(password).trim());
+    }
+    if (loc.address !== undefined) {
+      updates.push('address = ?');
+      params.push(loc.address);
+    }
+    if (loc.latitude !== undefined && loc.longitude !== undefined) {
+      updates.push('latitude = ?');
+      params.push(loc.latitude);
+      updates.push('longitude = ?');
+      params.push(loc.longitude);
     }
     if (profile) {
       const plan = db.prepare('SELECT id, price FROM plans WHERE name = ? OR profile = ?').get(profile, profile);
@@ -879,7 +1200,7 @@ async function updateCustomerInMikrotik(username, { dueDate, phone, password, pr
     }
 
     liveStatusCache.updatedAt = 0;
-    apiInstance.close();
+    if (apiInstance) apiInstance.close();
     return { success: true };
   } catch (err) {
     if (apiInstance) apiInstance.close();
@@ -967,6 +1288,9 @@ module.exports = {
   getMikrotikActiveSessions,
   getRouterConfig,
   parsePlanPrice,
+  parseLocationFields,
+  extractCoordsFromText,
+  resolveMapLocationInput,
   normalizePhoneLocal,
   getEffectiveDueDate,
   isBillOverdueForPeriod

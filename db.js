@@ -36,6 +36,9 @@ db.exec(`
     plan_id INTEGER,
     due_date INTEGER DEFAULT 10,
     status TEXT DEFAULT 'active',
+    address TEXT DEFAULT '',
+    latitude REAL,
+    longitude REAL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY(plan_id) REFERENCES plans(id)
   );
@@ -116,6 +119,15 @@ try {
 } catch (e) {}
 try {
   db.exec("ALTER TABLE customers ADD COLUMN comment TEXT;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE customers ADD COLUMN address TEXT DEFAULT '';");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE customers ADD COLUMN latitude REAL;");
+} catch (e) {}
+try {
+  db.exec("ALTER TABLE customers ADD COLUMN longitude REAL;");
 } catch (e) {}
 
 // Index untuk performa jangka panjang (ribuan pelanggan & transaksi bertahun-tahun)

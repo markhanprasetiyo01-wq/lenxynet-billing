@@ -18,6 +18,8 @@ const {
   getMikrotikTraffic,
   getMikrotikActiveSessions,
   parsePlanPrice,
+  parseLocationFields,
+  resolveMapLocationInput,
   getEffectiveDueDate
 } = require('./mikrotik');
 const { runAutoIsolirCheck, startCronJobs } = require('./cron');
@@ -603,15 +605,30 @@ app.get('/api/admin/export/customers.csv', (req, res) => {
   try {
     const customers = db.prepare(`
       SELECT c.id, c.name, c.pppoe_username, c.phone, c.due_date, c.status,
+             c.address, c.latitude, c.longitude,
              p.name as plan_name, p.price as plan_price, p.speed as plan_speed
       FROM customers c
       LEFT JOIN plans p ON c.plan_id = p.id
       ORDER BY c.id DESC
     `).all();
 
-    let csv = 'ID,Nama Pelanggan,Username PPPoE,No WA,Jatuh Tempo,Status Akun,Paket,Harga,Kecepatan\n';
+    const csvEsc = (v) => `"${String(v === null || v === undefined ? '' : v).replace(/"/g, '""')}"`;
+    let csv = 'ID,Nama Pelanggan,Username PPPoE,No WA,Alamat Lengkap,Latitude,Longitude,Jatuh Tempo,Status Akun,Paket,Harga,Kecepatan\n';
     customers.forEach(c => {
-      csv += `"${c.id}","${c.name}","${c.pppoe_username}","${c.phone}",${c.due_date},"${c.status}","${c.plan_name || '-'}","${c.plan_price || 0}","${c.plan_speed || '-'}"\n`;
+      csv += [
+        csvEsc(c.id),
+        csvEsc(c.name),
+        csvEsc(c.pppoe_username),
+        csvEsc(c.phone),
+        csvEsc(c.address || ''),
+        csvEsc(c.latitude ?? ''),
+        csvEsc(c.longitude ?? ''),
+        c.due_date,
+        csvEsc(c.status),
+        csvEsc(c.plan_name || '-'),
+        csvEsc(c.plan_price || 0),
+        csvEsc(c.plan_speed || '-')
+      ].join(',') + '\n';
     });
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -1313,9 +1330,16 @@ app.post('/api/admin/customers', async (req, res) => {
     return res.status(400).json({ error: 'Router MikroTik sedang terputus / offline. Hubungkan router terlebih dahulu sebelum menambah pelanggan.' });
   }
 
-  const { name, password, profile, phone, dueDate, comment, initialPayment } = req.body;
+  const { name, password, profile, phone, dueDate, comment, initialPayment, address, latitude, longitude } = req.body;
   if (!name || !password) {
     return res.status(400).json({ error: 'Nama/Username dan Password wajib diisi!' });
+  }
+
+  let loc;
+  try {
+    loc = parseLocationFields({ address, latitude, longitude });
+  } catch (locErr) {
+    return res.status(400).json({ success: false, error: locErr.message });
   }
 
   const cleanName = name.trim();
@@ -1345,7 +1369,10 @@ app.post('/api/admin/customers', async (req, res) => {
       phone: normalizePhoneNumber(phone),
       dueDate: parseInt(dueDate) || 10,
       comment,
-      initialPayment: initialPayment || 'paid'
+      initialPayment: initialPayment || 'paid',
+      address: loc.address,
+      latitude: loc.latitude,
+      longitude: loc.longitude
     });
     res.json({ success: true, message: `Pelanggan '${cleanName}' berhasil ditambahkan ke MikroTik & Database!` });
   } catch (err) {
@@ -1413,12 +1440,19 @@ app.post('/api/admin/customers/:id/update-due-date', requireAdminAuth, requireMi
   }
 });
 
-// Update Data Pelanggan Lengkap (Jatuh Tempo, No WA, Password, Paket Profile)
-app.put('/api/admin/customers/:id', requireAdminAuth, requireMikrotikConnected, async (req, res) => {
+// Helper: Update Data Pelanggan Lengkap (Jatuh Tempo, No WA, Password, Paket Profile, Alamat & Koordinat Map)
+async function handleUpdateCustomer(req, res) {
   const { id } = req.params;
-  const { dueDate, phone, password, profile } = req.body;
+  const { dueDate, phone, password, profile, address, latitude, longitude } = req.body;
   const cust = db.prepare('SELECT id, name, pppoe_username, due_date, phone, plan_id FROM customers WHERE id = ?').get(id);
   if (!cust) return res.status(404).json({ error: 'Pelanggan tidak ditemukan!' });
+
+  let loc;
+  try {
+    loc = parseLocationFields({ address, latitude, longitude });
+  } catch (locErr) {
+    return res.status(400).json({ success: false, error: locErr.message });
+  }
 
   // Validasi duplikasi nomor WhatsApp dengan pelanggan lain
   if (phone && phone.trim() !== '-' && phone.trim() !== '') {
@@ -1432,7 +1466,15 @@ app.put('/api/admin/customers/:id', requireAdminAuth, requireMikrotikConnected, 
   }
 
   try {
-    await updateCustomerInMikrotik(cust.pppoe_username, { dueDate, phone, password, profile });
+    await updateCustomerInMikrotik(cust.pppoe_username, {
+      dueDate,
+      phone,
+      password,
+      profile,
+      address: loc.address,
+      latitude: loc.latitude,
+      longitude: loc.longitude
+    });
     logActivity('UPDATE_CUSTOMER', `Update data ${cust.pppoe_username} (Jatuh Tempo: ${dueDate || cust.due_date})`, cust.pppoe_username);
     res.json({ 
       success: true, 
@@ -1440,36 +1482,63 @@ app.put('/api/admin/customers/:id', requireAdminAuth, requireMikrotikConnected, 
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Gagal update ke MikroTik: ' + err.message });
+  }
+}
+
+app.put('/api/admin/customers/:id', requireAdminAuth, requireMikrotikConnected, handleUpdateCustomer);
+app.post('/api/admin/customers/:id/update', requireAdminAuth, requireMikrotikConnected, handleUpdateCustomer);
+
+// Update Khusus Alamat Lengkap & Titik Koordinat Map (Tersimpan langsung di SQLite tanpa mengganggu MikroTik)
+app.post('/api/admin/customers/:id/location', requireAdminAuth, (req, res) => {
+  const { id } = req.params;
+  const cust = db.prepare('SELECT id, name, pppoe_username, address, latitude, longitude FROM customers WHERE id = ?').get(id);
+  if (!cust) return res.status(404).json({ success: false, error: 'Pelanggan tidak ditemukan!' });
+
+  let loc;
+  try {
+    loc = parseLocationFields(req.body || {});
+  } catch (locErr) {
+    return res.status(400).json({ success: false, error: locErr.message });
+  }
+
+  const nextAddress = loc.address !== undefined ? loc.address : (cust.address || '');
+  const nextLat = loc.latitude !== undefined ? loc.latitude : cust.latitude;
+  const nextLng = loc.longitude !== undefined ? loc.longitude : cust.longitude;
+
+  try {
+    db.prepare('UPDATE customers SET address = ?, latitude = ?, longitude = ? WHERE id = ?')
+      .run(nextAddress, nextLat, nextLng, id);
+
+    const hasPin = nextLat !== null && nextLat !== undefined && nextLng !== null && nextLng !== undefined;
+    logActivity(
+      'UPDATE_LOCATION',
+      `Update lokasi ${cust.pppoe_username}${hasPin ? ` (${nextLat}, ${nextLng})` : ' (tanpa pin)'}`,
+      cust.pppoe_username
+    );
+
+    res.json({
+      success: true,
+      message: `Alamat & titik lokasi '${cust.name}' berhasil disimpan!`,
+      customer: {
+        id: cust.id,
+        address: nextAddress,
+        latitude: nextLat,
+        longitude: nextLng
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Gagal menyimpan lokasi: ' + err.message });
   }
 });
 
-app.post('/api/admin/customers/:id/update', requireAdminAuth, requireMikrotikConnected, async (req, res) => {
-  // Alias POST untuk klien yang kesulitan dengan method PUT
-  const { id } = req.params;
-  const { dueDate, phone, password, profile } = req.body;
-  const cust = db.prepare('SELECT id, name, pppoe_username, due_date, phone, plan_id FROM customers WHERE id = ?').get(id);
-  if (!cust) return res.status(404).json({ error: 'Pelanggan tidak ditemukan!' });
-
-  // Validasi duplikasi nomor WhatsApp dengan pelanggan lain
-  if (phone && phone.trim() !== '-' && phone.trim() !== '') {
-    const dupPhone = findPhoneDuplicate(phone, id);
-    if (dupPhone) {
-      return res.status(400).json({ 
-        success: false, 
-        error: `Nomor WhatsApp '${phone}' sudah digunakan oleh pelanggan lain: '${dupPhone.name}' (${dupPhone.pppoe_username})!` 
-      });
-    }
-  }
-
+// Resolve Short Link Lokasi (maps.app.goo.gl, goo.gl/maps, Share Lokasi WA, Apple Maps, OSM, Waze)
+app.post('/api/admin/maps/resolve', requireAdminAuth, async (req, res) => {
+  const rawInput = req.body?.input || req.body?.url || '';
   try {
-    await updateCustomerInMikrotik(cust.pppoe_username, { dueDate, phone, password, profile });
-    logActivity('UPDATE_CUSTOMER', `Update data ${cust.pppoe_username} (Jatuh Tempo: ${dueDate || cust.due_date})`, cust.pppoe_username);
-    res.json({ 
-      success: true, 
-      message: `Data pelanggan '${cust.pppoe_username}' berhasil diperbarui dan disinkronkan ke MikroTik & Database!` 
-    });
+    const result = await resolveMapLocationInput(rawInput);
+    res.json({ success: true, ...result });
   } catch (err) {
-    res.status(500).json({ success: false, error: 'Gagal update ke MikroTik: ' + err.message });
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 

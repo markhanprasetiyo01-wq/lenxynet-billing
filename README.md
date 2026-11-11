@@ -7,6 +7,8 @@ Aplikasi manajemen pelanggan internet (PPPoE) dan penagihan otomatis untuk **Rou
 ## ✨ Fitur Utama
 
 * **Sinkronisasi Otomatis MikroTik:** Baca paket, harga (dari *comment* profile), status online/offline, isolir, dan buka isolir langsung ke RouterOS.
+* **Filter Pelanggan Lengkap & Kolom Alamat:** Cari nama/PPPoE/WA/alamat serta filter kombinasi **Tagihan**, **Status Akun**, **Paket**, dan **Koneksi Live (Online / Offline)**, dilengkapi ekspor CSV (termasuk alamat & koordinat).
+* **Peta Titik Lokasi Pelanggan (`Peta Lokasi`):** Lihat semua rumah pelanggan di peta (*Peta Jalan* & *Satelit*) dengan pin warna real-time (*Hijau Online*, *Kuning Offline*, *Merah Isolir*), tombol **Rute Maps**, serta dukungan paste **Share Lokasi WhatsApp**, shortlink `maps.app.goo.gl`, Google Maps, Apple Maps, OSM, Waze, maupun koordinat manual.
 * **Portal Pelanggan QRIS (`https://lenxynet.store/user.html`):** Pelanggan login pakai OTP WhatsApp, bayar 1 bulan atau multi-bulan (2, 3, 6, 12 bulan sekaligus), dan upload bukti transfer asli untuk diverifikasi Admin.
 * **Bot WhatsApp Otomatis:** Kirim OTP login, tagihan H-3 sebelum jatuh tempo, peringatan H+1, struk lunas, info bukti masuk ke Admin, dan broadcast massal.
 * **Auto-Isolir & Toleransi Lintas Bulan:** Otomatis memutus koneksi PPPoE jika menunggak melewati masa toleransi (akurat untuk tanggal jatuh tempo 1–31, termasuk bulan Februari 28/29 hari).
