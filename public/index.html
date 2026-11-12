@@ -285,6 +285,26 @@
                 </label>
               </div>
 
+              <!-- Quick Toggle Mode Login Portal User (OTP WA vs Langsung Tanpa OTP) -->
+              <div
+                class="px-3 py-2 rounded-xl bg-slate-950/70 border border-slate-800 flex items-center justify-between">
+                <div class="flex items-center gap-2 min-w-0">
+                  <i class="fa-solid fa-shield-halved text-sky-400 text-xs shrink-0"></i>
+                  <div class="truncate">
+                    <div class="font-semibold text-white text-xs truncate">Login Portal User</div>
+                    <div class="text-[9px] text-emerald-400 font-medium truncate" id="nav-user-otp-status-text">Wajib OTP WA</div>
+                  </div>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2"
+                  title="Aktif = Wajib OTP WhatsApp | Nonaktif = Langsung Masuk Tanpa OTP">
+                  <input type="checkbox" id="nav-user-otp-toggle" onchange="toggleUserLoginOtp(this.checked)"
+                    class="sr-only peer" checked>
+                  <div
+                    class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-sky-500">
+                  </div>
+                </label>
+              </div>
+
               <button onclick="openRouterSettingsModal(); closeNavDropdowns();"
                 class="w-full px-3 py-2 rounded-xl text-left text-xs text-slate-200 hover:bg-slate-800/90 hover:text-white flex items-center gap-2.5 transition">
                 <i class="fa-solid fa-server text-sky-400 w-4 text-center"></i>
@@ -436,6 +456,28 @@
               checked>
             <div
               class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500">
+            </div>
+          </label>
+        </div>
+
+        <!-- Quick Toggle Login Portal User Mobile -->
+        <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div
+              class="w-8 h-8 rounded-lg bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400 shrink-0">
+              <i class="fa-solid fa-shield-halved text-xs"></i>
+            </div>
+            <div class="truncate">
+              <span class="text-xs font-bold text-white block truncate">Login Portal User</span>
+              <span class="text-[10px] text-emerald-400 font-medium truncate" id="mobile-user-otp-status-text">Wajib OTP
+                WhatsApp</span>
+            </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2">
+            <input type="checkbox" id="mobile-user-otp-toggle" onchange="toggleUserLoginOtp(this.checked)"
+              class="sr-only peer" checked>
+            <div
+              class="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-sky-500">
             </div>
           </label>
         </div>
@@ -674,6 +716,23 @@
                   checked>
                 <div
                   class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500">
+                </div>
+              </label>
+            </div>
+
+            <!-- Toggle Switch Login User: Wajib OTP WA vs Langsung Tanpa OTP -->
+            <div class="mt-2 pt-2 border-t border-sky-800/30 flex items-center justify-between">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0" id="user-otp-status-dot"></span>
+                <span class="text-[10px] sm:text-[11px] font-semibold text-emerald-400 truncate"
+                  id="user-otp-status-text">Login User: Wajib OTP WA</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer shrink-0 ml-2"
+                title="ON = Pelanggan wajib verifikasi OTP WA | OFF = Langsung masuk tanpa OTP selama No. WA terdaftar">
+                <input type="checkbox" id="user-otp-toggle" onchange="toggleUserLoginOtp(this.checked)" class="sr-only peer"
+                  checked>
+                <div
+                  class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-sky-500">
                 </div>
               </label>
             </div>
@@ -3163,9 +3222,11 @@
         document.getElementById('stat-unpaid-count').innerText = data.unpaidCount;
         document.getElementById('input-tolerance').value = data.toleranceDays;
 
-        // Render Status Toggle Cron Job
+        // Render Status Toggle Cron Job & Mode Login User
         const isCronOn = (data.cronEnabled !== false);
         updateCronJobUI(isCronOn);
+        const isOtpRequired = (data.userLoginOtpRequired !== false);
+        updateUserLoginModeUI(isOtpRequired);
 
         isRouterConnected = (data.routerConnected === true);
         if (!isRouterConnected) {
@@ -4169,6 +4230,67 @@
           );
         } else {
           showToast(data.error || 'Gagal mengubah status cron job', 'error');
+          loadStats();
+        }
+      } catch (err) {
+        showToast('Gagal menghubungi server', 'error');
+        loadStats();
+      }
+    }
+
+    // === USER PORTAL LOGIN MODE CONTROLLER (WAJIB OTP VS LANGSUNG TANPA OTP) ===
+    function updateUserLoginModeUI(isOtpRequired) {
+      const toggleMain = document.getElementById('user-otp-toggle');
+      const toggleNav = document.getElementById('nav-user-otp-toggle');
+      const toggleMobile = document.getElementById('mobile-user-otp-toggle');
+      const statusDot = document.getElementById('user-otp-status-dot');
+      const statusText = document.getElementById('user-otp-status-text');
+      const navStatusText = document.getElementById('nav-user-otp-status-text');
+      const mobileStatusText = document.getElementById('mobile-user-otp-status-text');
+
+      if (toggleMain) toggleMain.checked = isOtpRequired;
+      if (toggleNav) toggleNav.checked = isOtpRequired;
+      if (toggleMobile) toggleMobile.checked = isOtpRequired;
+
+      if (statusDot) {
+        statusDot.className = isOtpRequired
+          ? 'w-2 h-2 rounded-full bg-emerald-400 shrink-0'
+          : 'w-2 h-2 rounded-full bg-amber-400 shrink-0';
+      }
+      if (statusText) {
+        statusText.innerText = isOtpRequired ? 'Login User: Wajib OTP WA' : 'Login User: Langsung (Tanpa OTP)';
+        statusText.className = isOtpRequired
+          ? 'text-[10px] sm:text-[11px] font-semibold text-emerald-400 truncate'
+          : 'text-[10px] sm:text-[11px] font-semibold text-amber-400 truncate';
+      }
+      if (navStatusText) {
+        navStatusText.innerText = isOtpRequired ? 'Wajib OTP WA' : 'Langsung Tanpa OTP';
+        navStatusText.className = isOtpRequired ? 'text-[9px] text-emerald-400 font-medium truncate' : 'text-[9px] text-amber-400 font-medium truncate';
+      }
+      if (mobileStatusText) {
+        mobileStatusText.innerText = isOtpRequired ? 'Wajib OTP WhatsApp' : 'Langsung Tanpa OTP (Cek No. WA)';
+        mobileStatusText.className = isOtpRequired ? 'text-[10px] text-emerald-400 font-medium truncate' : 'text-[10px] text-amber-400 font-medium truncate';
+      }
+    }
+
+    async function toggleUserLoginOtp(otpRequired) {
+      updateUserLoginModeUI(otpRequired);
+      try {
+        const res = await fetch('/api/admin/settings/user-login-mode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otpRequired })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showToast(
+            otpRequired
+              ? 'Login User diatur ke Mode WAJIB OTP WhatsApp.'
+              : 'Login User diatur ke Mode LANGSUNG TANPA OTP (selama No. WA ada di database).',
+            otpRequired ? 'success' : 'info'
+          );
+        } else {
+          showToast(data.error || 'Gagal mengubah mode login user', 'error');
           loadStats();
         }
       } catch (err) {

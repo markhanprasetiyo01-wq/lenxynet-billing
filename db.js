@@ -170,6 +170,9 @@ if (!checkSetting.get('admin_password')) {
 if (!checkSetting.get('wa_status')) {
   insertSetting.run('wa_status', 'disconnected');
 }
+if (!checkSetting.get('user_login_otp_required')) {
+  insertSetting.run('user_login_otp_required', 'true'); // Default wajib OTP WhatsApp saat login portal user
+}
 if (!checkSetting.get('mock_payment_enabled')) {
   insertSetting.run('mock_payment_enabled', 'false');
 } else {

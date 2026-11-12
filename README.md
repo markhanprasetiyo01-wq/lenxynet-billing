@@ -9,10 +9,110 @@ Aplikasi manajemen pelanggan internet (PPPoE) dan penagihan otomatis untuk **Rou
 * **Sinkronisasi Otomatis MikroTik:** Baca paket, harga (dari *comment* profile), status online/offline, isolir, dan buka isolir langsung ke RouterOS.
 * **Filter Pelanggan Lengkap & Kolom Alamat:** Cari nama/PPPoE/WA/alamat serta filter kombinasi **Tagihan**, **Status Akun**, **Paket**, dan **Koneksi Live (Online / Offline)**, dilengkapi ekspor CSV (termasuk alamat & koordinat).
 * **Peta Titik Lokasi Pelanggan (`Peta Lokasi`):** Lihat semua rumah pelanggan di peta (*Peta Jalan* & *Satelit*) dengan pin warna real-time (*Hijau Online*, *Kuning Offline*, *Merah Isolir*), tombol **Rute Maps**, serta dukungan paste **Share Lokasi WhatsApp**, shortlink `maps.app.goo.gl`, Google Maps, Apple Maps, OSM, Waze, maupun koordinat manual.
-* **Portal Pelanggan QRIS (`https://lenxynet.store/user.html`):** Pelanggan login pakai OTP WhatsApp, bayar 1 bulan atau multi-bulan (2, 3, 6, 12 bulan sekaligus), dan upload bukti transfer asli untuk diverifikasi Admin.
+* **Portal Pelanggan QRIS (`https://lenxynet.store/user.html`):** Pelanggan login lewat nomor WhatsApp dengan opsi toggle di Dashboard Admin (**Wajib OTP WA** atau **Langsung Tanpa OTP** selama nomor WA terdaftar), bayar 1 bulan atau multi-bulan (2, 3, 6, 12 bulan sekaligus), dan upload bukti transfer asli untuk diverifikasi Admin.
 * **Bot WhatsApp Otomatis:** Kirim OTP login, tagihan H-3 sebelum jatuh tempo, peringatan H+1, struk lunas, info bukti masuk ke Admin, dan broadcast massal.
 * **Auto-Isolir & Toleransi Lintas Bulan:** Otomatis memutus koneksi PPPoE jika menunggak melewati masa toleransi (akurat untuk tanggal jatuh tempo 1–31, termasuk bulan Februari 28/29 hari).
 * **Backup Otomatis ke Telegram:** Backup database SQLite dan konfigurasi MikroTik (`.backup` & `.rsc`) otomatis setiap dini hari.
+
+---
+
+## 💻 Panduan Menjalankan di PC Linux Server (24 Jam)
+
+Untuk PC/Mini PC khusus server, gunakan **Linux versi CLI saja (tanpa Desktop/GUI)** agar lebih ringan, stabil 24/7, dan minim hang. Semua kontrol aplikasi tetap lewat browser (`http://<IP-Server>:3000` atau `https://lenxynet.store`), dan WhatsApp Bot (`@whiskeysockets/baileys`) berjalan murni tanpa browser/Chrome.
+
+### Rekomendasi OS Linux
+* **Ubuntu Server 24.04 LTS (CLI)** — *Pilihan utama:* paling ramah, dukungan driver LAN/hardware luas, dan instalasi Node.js/Cloudflared sangat mudah. Saat install, centang **Install OpenSSH server**.
+* **Debian 12 (Bookworm) CLI** — *Pilihan hemat RAM:* cocok untuk PC spek pas-pasan (RAM 2–4 GB); saat instalasi hilangkan centang *Debian desktop environment* dan sisakan **SSH server** + **standard system utilities**.
+* *(Jika PC tetap dipakai kerja harian memakai monitor/mouse, gunakan desktop ringan seperti **Linux Mint XFCE** atau **Xubuntu 24.04 LTS** — perintah di bawah tetap sama).*
+
+### Langkah 1: Siapkan Timezone WIB, Node.js 22+ & PM2
+> [!IMPORTANT]
+> Aplikasi wajib memakai **Node.js `>= 22.13.0`** agar modul SQLite bawaan (`node:sqlite`) berjalan. Jangan gunakan Node.js bawaan `apt` jika masih versi 18/20.
+
+Login ke server via terminal atau SSH (`ssh user@<IP-SERVER>`), lalu jalankan:
+```bash
+# Set timezone ke WIB (penting untuk jadwal Cron 00:01 & 08:30)
+sudo timedatectl set-timezone Asia/Jakarta
+
+# Update sistem & instal alat dasar
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y curl git netcat-openbsd
+
+# Instal Node.js 22 LTS
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt install -y nodejs
+node -v
+
+# Instal PM2 untuk auto-run 24/7 & auto-rotate log
+sudo npm install -g pm2
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 5
+```
+
+### Langkah 2: Ambil Source Code & Instal Dependensi
+```bash
+sudo mkdir -p /var/www && sudo chown -R $USER:$USER /var/www
+cd /var/www
+git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git lenxynet
+cd lenxynet
+npm install --omit=dev
+```
+*(Jangan menyalin `node_modules/` atau `cloudflared.exe` dari Windows ke Linux).*
+
+### Langkah 3: Pindahkan Data dari PC Windows ke Linux
+Karena data lokal tidak di-upload ke GitHub (lihat `.gitignore`), salin data berikut jika tidak ingin mulai dari nol:
+1. **Di PC Windows**, hentikan dulu `node server.js` (`Ctrl+C`) agar file `database.sqlite-wal` dan `database.sqlite-shm` tersimpan utuh ke `database.sqlite`.
+2. Salin ke folder `/var/www/lenxynet/` di Linux (pakai `scp`, WinSCP, atau flashdisk):
+   * `database.sqlite` *(wajib agar seluruh pelanggan, tagihan, & pengaturan ikut pindah)*
+   * `public/uploads/` *(gambar QRIS toko & bukti transfer yang masih tersimpan lokal)*
+   * `wa_session/` *(opsional — jika disalin, bot WA langsung aktif tanpa scan QR ulang)*
+   * `backups/` *(opsional)*
+
+### Langkah 4: Jalankan Otomatis 24/7 dengan PM2
+```bash
+cd /var/www/lenxynet
+pm2 start server.js --name lenxynet
+pm2 save
+pm2 startup
+```
+* Jika `pm2 startup` menampilkan perintah `sudo env PATH=...`, copy & jalankan baris tersebut satu kali agar aplikasi otomatis hidup setelah mati lampu/reboot.
+* **Firewall & Port:** Saat dijalankan sebagai user biasa, port **`3000`** langsung aktif (port `80` dilewati otomatis dan aman). Jika UFW firewall aktif dan ingin diakses dari jaringan LAN:
+  ```bash
+  sudo ufw allow 3000/tcp
+  ```
+
+### Langkah 5: Pindahkan Cloudflare Tunnel (`https://lenxynet.store`) ke Linux
+> [!WARNING]
+> Pastikan service `Cloudflared` di **PC Windows lama dimatikan/di-uninstall** sebelum atau sesudah pindah (`cloudflared.exe service uninstall` via PowerShell Administrator) agar tidak bentrok memakai token tunnel yang sama di 2 mesin.
+
+Untuk PC Linux 64-bit (`amd64`):
+```bash
+curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb
+rm cloudflared.deb
+
+# Pasang token tunnel dari Cloudflare Zero Trust -> Tunnels
+sudo cloudflared service install <TOKEN_TUNNEL_ANDA>
+sudo systemctl status cloudflared
+```
+Pastikan *Public Hostname* domain Anda di Cloudflare Zero Trust tetap diarahkan ke **`http://localhost:3000`**.
+
+### Langkah 6: Pastikan Koneksi LAN ke MikroTik Lancar
+Hubungkan PC Linux ke jaringan **LAN yang satu rute dengan MikroTik** (hindari memakai dua default gateway sekaligus antara WiFi/tethering HP dan kabel LAN agar tunnel Cloudflare & koneksi API MikroTik tidak timeout/Error `1033`). Cek dari terminal Linux:
+```bash
+nc -zv <IP_MIKROTIK> 8728
+```
+Jika muncul `succeeded`, buka **`https://lenxynet.store`** atau **`http://<IP-LINUX>:3000`**, lalu cek menu **Pengaturan → Koneksi MikroTik** dan **WhatsApp** (scan QR jika tidak menyalin `wa_session/`).
+
+### Perintah Harian di Linux Server (SSH)
+| Keperluan | Perintah |
+| :--- | :--- |
+| **Cek status aplikasi** | `pm2 status` |
+| **Lihat log real-time** | `pm2 logs lenxynet --lines 50` |
+| **Restart aplikasi** | `pm2 restart lenxynet` |
+| **Update versi terbaru dari GitHub** | `cd /var/www/lenxynet && git pull && npm install --omit=dev && pm2 restart lenxynet` |
+| **Cek status Cloudflare Tunnel** | `sudo systemctl status cloudflared` |
 
 ---
 

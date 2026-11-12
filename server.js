@@ -1228,6 +1228,7 @@ app.get('/api/admin/stats', async (req, res) => {
     const routerIp = db.prepare("SELECT value FROM settings WHERE key = 'router_ip'").get()?.value || '';
     const routerConnected = db.prepare("SELECT value FROM settings WHERE key = 'router_connected'").get()?.value === 'true';
     const cronEnabled = db.prepare("SELECT value FROM settings WHERE key = 'cron_enabled'").get()?.value !== 'false';
+    const userLoginOtpRequired = isUserOtpRequired();
 
     // Jika koneksi MikroTik terputus, jangan tampilkan data statistik apapun
     if (!routerConnected) {
@@ -1241,6 +1242,7 @@ app.get('/api/admin/stats', async (req, res) => {
         conflictCount: 0,
         toleranceDays: parseInt(toleranceDays),
         cronEnabled,
+        userLoginOtpRequired,
         waStatus,
         routerIp,
         routerConnected: false
@@ -1264,6 +1266,7 @@ app.get('/api/admin/stats', async (req, res) => {
       conflictCount: conflicts.length,
       toleranceDays: parseInt(toleranceDays),
       cronEnabled,
+      userLoginOtpRequired,
       waStatus,
       routerIp,
       routerConnected: true
@@ -1727,6 +1730,28 @@ app.post('/api/admin/settings/cron-toggle', requireAdminAuth, (req, res) => {
   }
 });
 
+// Toggle Mode Login Portal Pelanggan (Wajib OTP WA <-> Langsung Masuk Tanpa OTP)
+app.post('/api/admin/settings/user-login-mode', requireAdminAuth, (req, res) => {
+  try {
+    const otpRequired = req.body.otpRequired !== false && req.body.otpRequired !== 'false';
+    const val = otpRequired ? 'true' : 'false';
+    const exists = db.prepare("SELECT key FROM settings WHERE key = 'user_login_otp_required'").get();
+    if (exists) {
+      db.prepare("UPDATE settings SET value = ? WHERE key = 'user_login_otp_required'").run(val);
+    } else {
+      db.prepare("INSERT INTO settings (key, value) VALUES ('user_login_otp_required', ?)").run(val);
+    }
+    logActivity(
+      'USER_LOGIN_MODE_TOGGLE',
+      `Mode login portal pelanggan diubah menjadi: ${otpRequired ? 'Wajib OTP WhatsApp' : 'Langsung Tanpa OTP (No. WA Terdaftar)'}`,
+      'User Portal'
+    );
+    res.json({ success: true, otpRequired });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Fitur Darurat Admin: Ubah Status Tagihan Secara Manual (Lunas <-> Belum Bayar)
 app.post('/api/admin/customers/:id/toggle-bill-status', requireAdminAuth, requireMikrotikConnected, async (req, res) => {
   try {
@@ -1862,7 +1887,73 @@ app.post('/api/admin/customers/:id/toggle-status', requireMikrotikConnected, asy
   }
 });
 
-// === ENDPOINT VERIFIKASI OTP WHATSAPP UNTUK USER PORTAL ===
+// === ENDPOINT VERIFIKASI OTP WHATSAPP / LOGIN LANGSUNG UNTUK USER PORTAL ===
+
+function isUserOtpRequired() {
+  return db.prepare("SELECT value FROM settings WHERE key = 'user_login_otp_required'").get()?.value !== 'false';
+}
+
+function findCustomerByPhone(cleanPhone) {
+  const noZero = cleanPhone.replace(/^0/, '');
+  return db.prepare(`
+    SELECT * FROM customers
+    WHERE phone != '-' AND phone != '' AND (phone = ? OR phone = ? OR phone = ? OR phone = ?)
+  `).get(cleanPhone, noZero, '62' + noZero, '0' + noZero);
+}
+
+function createUserPortalSession(cust, methodLabel = 'OTP WhatsApp') {
+  const userToken = 'lx_usr_' + crypto.randomBytes(24).toString('hex');
+  db.prepare("INSERT INTO user_sessions (token, customer_id, pppoe_username, expires_at) VALUES (?, ?, ?, datetime('now', '+180 days', 'localtime'))")
+    .run(userToken, cust.id, cust.pppoe_username);
+  logActivity('LOGIN', `Pelanggan login ke portal via ${methodLabel} (${cust.name})`, cust.pppoe_username);
+  return userToken;
+}
+
+// 0. Cek Konfigurasi Mode Login Portal Pelanggan (Publik)
+app.get('/api/user/login-config', (req, res) => {
+  res.json({ otpRequired: isUserOtpRequired() });
+});
+
+// 0b. Login Langsung Tanpa OTP Selama Nomor WA Terdaftar (Khusus Saat Mode Tanpa OTP Aktif)
+app.post('/api/user/direct-login', (req, res) => {
+  if (isUserOtpRequired()) {
+    return res.status(403).json({
+      error: 'Login langsung tanpa OTP sedang dinonaktifkan oleh Admin. Silakan login menggunakan kode OTP WhatsApp.'
+    });
+  }
+
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Nomor WhatsApp wajib diisi!' });
+
+  const cleanPhone = normalizePhoneNumber(phone);
+  if (cleanPhone === '-' || cleanPhone.length < 9) {
+    return res.status(400).json({ error: 'Format nomor WhatsApp tidak valid!' });
+  }
+
+  try {
+    const cust = findCustomerByPhone(cleanPhone);
+    if (!cust) {
+      return res.status(404).json({
+        error: 'Nomor WhatsApp tidak terdaftar di sistem LenxyNet. Pastikan nomor sesuai dengan yang didaftarkan pada pemasangan.'
+      });
+    }
+
+    const userToken = createUserPortalSession(cust, 'Langsung Tanpa OTP');
+    res.json({
+      success: true,
+      message: 'Login berhasil! Selamat datang di Portal LenxyNet.',
+      token: userToken,
+      user: {
+        id: cust.id,
+        name: cust.name,
+        pppoe_username: cust.pppoe_username,
+        phone: cust.phone
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // 1. Request OTP ke nomor WhatsApp (Dengan Cooldown 60 Detik Anti-Spam)
 app.post('/api/user/request-otp', async (req, res) => {
@@ -1876,10 +1967,7 @@ app.post('/api/user/request-otp', async (req, res) => {
 
   try {
     // 1. Cek apakah nomor WA ini terdaftar di database
-    const cust = db.prepare(`
-      SELECT * FROM customers 
-      WHERE phone = ? OR phone = ? OR phone = ?
-    `).get(cleanPhone, cleanPhone.replace(/^0/, ''), '62' + cleanPhone.replace(/^0/, ''));
+    const cust = findCustomerByPhone(cleanPhone);
 
     if (!cust) {
       return res.status(404).json({ 
@@ -1985,11 +2073,7 @@ app.post('/api/user/verify-otp', (req, res) => {
   }
 
   // Terbitkan token sesi pelanggan persisten (berlaku 180 hari / tersimpan permanen di browser)
-  const userToken = 'lx_usr_' + crypto.randomBytes(24).toString('hex');
-  db.prepare("INSERT INTO user_sessions (token, customer_id, pppoe_username, expires_at) VALUES (?, ?, ?, datetime('now', '+180 days', 'localtime'))")
-    .run(userToken, cust.id, cust.pppoe_username);
-
-  logActivity('LOGIN', `Pelanggan login ke portal (${cust.name})`, cust.pppoe_username);
+  const userToken = createUserPortalSession(cust, 'OTP WhatsApp');
 
   res.json({
     success: true,

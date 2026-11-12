@@ -80,12 +80,12 @@
           <input type="tel" id="input-phone" placeholder="08xxxxxxxxxx"
             class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-sm text-white font-mono focus:outline-none focus:border-sky-400 transition shadow-inner">
         </div>
-        <p class="text-[11px] text-slate-400 mt-2">
+        <p id="login-helper-text" class="text-[11px] text-slate-400 mt-2">
           *Hanya nomor WhatsApp yang telah didaftarkan pada pemasangan internet yang dapat meminta kode verifikasi.
         </p>
       </div>
 
-      <button onclick="requestOTP()" id="btn-request-otp"
+      <button onclick="submitPhoneLogin()" id="btn-request-otp"
         class="w-full py-3 px-4 bg-gradient-to-r from-sky-600 to-cyan-500 hover:from-sky-500 hover:to-cyan-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-lg shadow-sky-600/30 transition flex items-center justify-center gap-2 active:scale-95">
         <i class="fa-solid fa-paper-plane text-xs"></i> Kirim Kode OTP via WhatsApp
       </button>
@@ -121,7 +121,7 @@
     </div>
 
     <div class="mt-8 text-center border-t border-brand-border/60 pt-4">
-      <p class="text-[10px] text-slate-500 font-medium">LenxyNet Fiber Security • Proteksi OTP WhatsApp</p>
+      <p id="login-footer-text" class="text-[10px] text-slate-500 font-medium">LenxyNet Fiber Security • Proteksi OTP WhatsApp</p>
     </div>
   </div>
 
@@ -494,7 +494,14 @@
       const originalFetch = window.fetch;
       window.fetch = async function (resource, init = {}) {
         let url = typeof resource === 'string' ? resource : (resource && resource.url ? resource.url : '');
-        if (typeof url === 'string' && url.startsWith('/api/user') && !url.includes('/api/user/request-otp') && !url.includes('/api/user/verify-otp') && !url.includes('/api/user/logout')) {
+        const isPublicUserAuthRoute = typeof url === 'string' && (
+          url.includes('/api/user/request-otp') ||
+          url.includes('/api/user/verify-otp') ||
+          url.includes('/api/user/direct-login') ||
+          url.includes('/api/user/login-config') ||
+          url.includes('/api/user/logout')
+        );
+        if (typeof url === 'string' && url.startsWith('/api/user') && !isPublicUserAuthRoute) {
           const userToken = localStorage.getItem('lenxynet_user_token') || sessionStorage.getItem('lenxynet_user_token');
           let activeToken = userToken;
           if (!activeToken) {
@@ -517,7 +524,7 @@
 
         const response = await originalFetch(resource, init);
 
-        if (response.status === 401 && typeof url === 'string' && url.startsWith('/api/user') && !url.includes('/api/user/request-otp') && !url.includes('/api/user/verify-otp') && !url.includes('/api/user/logout')) {
+        if (response.status === 401 && typeof url === 'string' && url.startsWith('/api/user') && !isPublicUserAuthRoute) {
           localStorage.removeItem('lenxynet_user_token');
           localStorage.removeItem('lenxynet_auth_user');
           sessionStorage.removeItem('lenxynet_user_token');
@@ -526,8 +533,9 @@
           const loginSec = document.getElementById('login-section');
           if (portalSec) portalSec.classList.add('hidden');
           if (loginSec) loginSec.classList.remove('hidden');
+          if (typeof loadUserLoginConfig === 'function') loadUserLoginConfig();
           if (typeof showToast === 'function') {
-            showToast('Sesi Anda telah kedaluwarsa. Silakan verifikasi nomor WhatsApp kembali.', 'error');
+            showToast('Sesi Anda telah kedaluwarsa. Silakan masuk kembali.', 'error');
           }
         }
 
@@ -535,7 +543,80 @@
       };
     })();
 
-    // === OTP AUTHENTICATION CLIENT LOGIC ===
+    // === OTP & DIRECT AUTHENTICATION CLIENT LOGIC ===
+    let userLoginOtpRequired = true;
+
+    function updateLoginModeUI() {
+      const btn = document.getElementById('btn-request-otp');
+      const helper = document.getElementById('login-helper-text');
+      const footer = document.getElementById('login-footer-text');
+      if (userLoginOtpRequired) {
+        if (helper) helper.innerText = '*Hanya nomor WhatsApp yang telah didaftarkan pada pemasangan internet yang dapat meminta kode verifikasi.';
+        if (btn && !btn.disabled) btn.innerHTML = '<i class="fa-solid fa-paper-plane text-xs"></i> Kirim Kode OTP via WhatsApp';
+        if (footer) footer.innerText = 'LenxyNet Fiber Security • Proteksi OTP WhatsApp';
+      } else {
+        document.getElementById('step-otp')?.classList.add('hidden');
+        document.getElementById('step-phone')?.classList.remove('hidden');
+        if (helper) helper.innerText = '*Masukkan nomor WhatsApp yang terdaftar di sistem LenxyNet untuk langsung masuk ke portal tanpa OTP.';
+        if (btn && !btn.disabled) btn.innerHTML = '<i class="fa-solid fa-right-to-bracket text-xs"></i> Masuk ke Portal Saya';
+        if (footer) footer.innerText = 'LenxyNet Fiber • Akses Cepat Nomor Terdaftar';
+      }
+    }
+
+    function persistUserSession(data) {
+      localStorage.setItem('lenxynet_user_token', data.token);
+      localStorage.setItem('lenxynet_auth_user', data.user.pppoe_username);
+      sessionStorage.setItem('lenxynet_user_token', data.token);
+      sessionStorage.setItem('lenxynet_auth_user', data.user.pppoe_username);
+      showPortalView(data.user.pppoe_username);
+    }
+
+    function submitPhoneLogin() {
+      if (userLoginOtpRequired) {
+        requestOTP();
+      } else {
+        directLoginByPhone();
+      }
+    }
+
+    async function directLoginByPhone() {
+      const phoneInput = document.getElementById('input-phone');
+      const phone = phoneInput.value.trim();
+      if (!phone) {
+        showToast('Silakan masukkan nomor WhatsApp Anda!', 'error');
+        phoneInput.focus();
+        return;
+      }
+
+      const btn = document.getElementById('btn-request-otp');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memeriksa Nomor...';
+
+      try {
+        const res = await fetch('/api/user/direct-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast(data.message || 'Login Berhasil! Selamat datang.', 'success');
+          persistUserSession(data);
+        } else {
+          if (res.status === 403) {
+            userLoginOtpRequired = true;
+            updateLoginModeUI();
+          }
+          showToast(data.error || 'Nomor WhatsApp tidak terdaftar', 'error');
+        }
+      } catch (e) {
+        showToast('Gagal menghubungi server', 'error');
+      } finally {
+        btn.disabled = false;
+        updateLoginModeUI();
+      }
+    }
 
     async function requestOTP() {
       const phoneInput = document.getElementById('input-phone');
@@ -573,7 +654,7 @@
         showToast('Gagal menghubungi server', 'error');
       } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fa-solid fa-paper-plane text-xs"></i> Kirim Kode OTP via WhatsApp';
+        updateLoginModeUI();
       }
     }
 
@@ -605,12 +686,7 @@
 
         if (res.ok && data.success) {
           showToast('Verifikasi Berhasil! Selamat datang.', 'success');
-          // Simpan sesi permanen di localStorage agar tidak perlu login ulang saat tutup tab
-          localStorage.setItem('lenxynet_user_token', data.token);
-          localStorage.setItem('lenxynet_auth_user', data.user.pppoe_username);
-          sessionStorage.setItem('lenxynet_user_token', data.token);
-          sessionStorage.setItem('lenxynet_auth_user', data.user.pppoe_username);
-          showPortalView(data.user.pppoe_username);
+          persistUserSession(data);
         } else {
           showToast(data.error || 'Kode OTP salah atau kadaluarsa', 'error');
         }
@@ -1049,6 +1125,17 @@
       document.getElementById('userProofModal').classList.add('hidden');
     }
 
+    async function loadUserLoginConfig() {
+      try {
+        const res = await fetch('/api/user/login-config');
+        if (res.ok) {
+          const cfg = await res.json();
+          userLoginOtpRequired = (cfg.otpRequired !== false);
+          updateLoginModeUI();
+        }
+      } catch (e) {}
+    }
+
     // Init Logic: Cek apakah sudah login di localStorage/session atau pre-fill nomor HP
     window.addEventListener('DOMContentLoaded', () => {
       const userToken = localStorage.getItem('lenxynet_user_token') || sessionStorage.getItem('lenxynet_user_token');
@@ -1056,19 +1143,36 @@
       const urlParams = new URLSearchParams(window.location.search);
       const urlPhone = urlParams.get('phone') || urlParams.get('id');
 
+      const phoneInput = document.getElementById('input-phone');
+      const otpInput = document.getElementById('input-otp');
+      if (phoneInput) {
+        phoneInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            submitPhoneLogin();
+          }
+        });
+      }
+      if (otpInput) {
+        otpInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            verifyOTP();
+          }
+        });
+      }
+
       if (userToken && authUser) {
         showPortalView(authUser);
       } else {
-        // Tampilkan halaman verifikasi OTP
+        // Tampilkan halaman login sesuai mode admin (Wajib OTP vs Langsung Tanpa OTP)
         document.getElementById('login-section').classList.remove('hidden');
         document.getElementById('portal-section').classList.add('hidden');
+        loadUserLoginConfig();
 
         // Mengisi otomatis form input nomor WhatsApp dari parameter link (?phone=)
-        if (urlPhone) {
-          const phoneInput = document.getElementById('input-phone');
-          if (phoneInput) {
-            phoneInput.value = urlPhone;
-          }
+        if (urlPhone && phoneInput) {
+          phoneInput.value = urlPhone;
         }
       }
 
