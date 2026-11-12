@@ -254,7 +254,6 @@ Bisa diaktifkan / dijeda kapan saja lewat tombol saklar **Toggle Cron Job (ON/OF
 ## 🌐 Info Standar IP Pool PPPoE & Alternatif PC Windows
 
 * **IP Pool PPPoE:** Subnet `10.10.0.0/21` (Gateway `10.10.0.1`, rentang IP pelanggan `10.10.0.2 - 10.10.7.254` untuk **2.046 user**). Remote modem router pelanggan diakses via IP PPPoE port `80`.
-* **Editor Massal (`/editor.html`):** Spreadsheet online terproteksi login Admin untuk edit jatuh tempo / export script Winbox `.rsc`.
 * **Alternatif PC Windows Baru:** Install [Node.js v22+ LTS](https://nodejs.org/) & [Git](https://git-scm.com/), lalu jalankan di PowerShell:
   ```powershell
   git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git

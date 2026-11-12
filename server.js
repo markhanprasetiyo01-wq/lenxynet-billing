@@ -44,11 +44,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Lindungi file CSV data pelanggan mentah agar tidak bisa diakses langsung oleh publik tanpa login Admin
-app.use(['/data_pelanggan_pppoe.csv', '/data_pelanggan_excel.csv'], (req, res) => {
-  return res.status(403).send('Akses ditolak: Silakan login melalui Dashboard Admin untuk mengunduh data pelanggan.');
-});
-
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ limit: '20mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
@@ -653,21 +648,6 @@ app.get('/api/admin/backup/database', (req, res) => {
     try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (err) {}
     res.status(500).send('Gagal membuat snapshot backup database: ' + e.message);
   }
-});
-
-// Endpoint CSV Terproteksi untuk Editor Massal
-app.get('/api/admin/editor-csv', (req, res) => {
-  const rootCsv = path.join(__dirname, 'data_pelanggan_pppoe.csv');
-  const pubCsv = path.join(__dirname, 'public', 'data_pelanggan_pppoe.csv');
-  const target = fs.existsSync(rootCsv) ? rootCsv : pubCsv;
-  if (!fs.existsSync(target)) return res.status(404).send('File data tidak ditemukan.');
-  res.sendFile(target);
-});
-
-app.get('/api/admin/editor-excel', (req, res) => {
-  const target = path.join(__dirname, 'public', 'data_pelanggan_excel.csv');
-  if (!fs.existsSync(target)) return res.status(404).send('File Excel tidak ditemukan.');
-  res.download(target, 'data_pelanggan_excel.csv');
 });
 
 // === WHATSAPP GATEWAY ROUTES ===
