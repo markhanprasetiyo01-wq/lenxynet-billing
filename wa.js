@@ -15,21 +15,48 @@ let currentQR = null;
 let connectionStatus = 'disconnected'; // 'disconnected', 'connecting', 'connected'
 let isInitializing = false;
 let reconnectTimer = null;
+let hasLoggedQrThisAttempt = false;
+let reconnectAttempts = 0;
+let lastDisconnectLogAt = 0;
 
-function scheduleReconnect(delayMs) {
+function hasRegisteredSession() {
+  try {
+    const credsPath = path.join(AUTH_DIR, 'creds.json');
+    if (!fs.existsSync(credsPath)) return false;
+    const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
+    return Boolean(creds && creds.registered === true);
+  } catch (e) {
+    return false;
+  }
+}
+
+function scheduleReconnect(delayMs, forceQr = false) {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    initWhatsApp();
+    initWhatsApp({ forceQr });
   }, delayMs);
 }
 
-async function initWhatsApp() {
+async function initWhatsApp(options = {}) {
+  const forceQr = Boolean(options && options.forceQr);
   if (isInitializing) return;
+
+  // Jika belum ada sesi WhatsApp yang terdaftar & bukan diminta manual dari Dashboard Admin,
+  // jangan loop membuat QR terus-menerus di background.
+  if (!forceQr && !hasRegisteredSession()) {
+    connectionStatus = 'disconnected';
+    currentQR = null;
+    try { db.prepare("UPDATE settings SET value = 'disconnected' WHERE key = 'wa_status'").run(); } catch (e) {}
+    console.log('[WhatsApp] Belum ada sesi terdaftar. Buka menu WhatsApp di Dashboard Admin jika ingin scan QR.');
+    return;
+  }
+
   isInitializing = true;
+  hasLoggedQrThisAttempt = false;
 
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -64,33 +91,49 @@ async function initWhatsApp() {
         } catch (e) {}
         connectionStatus = 'connecting';
         try { db.prepare("UPDATE settings SET value = 'connecting' WHERE key = 'wa_status'").run(); } catch (e) {}
-        console.log('[WhatsApp] QR Code siap untuk di-scan!');
+        if (!hasLoggedQrThisAttempt) {
+          hasLoggedQrThisAttempt = true;
+          console.log('[WhatsApp] QR Code siap untuk di-scan di Dashboard Admin.');
+        }
       }
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const isRegistered = hasRegisteredSession();
         const isReplaced = statusCode === 440;
         const isLoggedOut = statusCode === DisconnectReason.loggedOut;
-        const shouldReconnect = !isLoggedOut && !isReplaced;
-        console.log(`[WhatsApp] Koneksi terputus. Kode status: ${statusCode}. Reconnect: ${shouldReconnect}`);
+        const shouldReconnect = isRegistered && !isLoggedOut && !isReplaced;
 
         connectionStatus = 'disconnected';
         currentQR = null;
+        hasLoggedQrThisAttempt = false;
         try { db.prepare("UPDATE settings SET value = 'disconnected' WHERE key = 'wa_status'").run(); } catch (e) {}
 
         if (isReplaced) {
-          console.log('[WhatsApp] Sesi digantikan oleh perangkat lain (kode 440 / connection replaced). Auto-reconnect dijeda.');
-        } else if (shouldReconnect) {
-          scheduleReconnect(5000);
-        } else {
-          // Logged out: bersihkan folder sesi
+          console.log('[WhatsApp] Sesi digantikan oleh perangkat lain (kode 440). Auto-reconnect dijeda.');
+        } else if (isLoggedOut) {
           try {
             fs.rmSync(AUTH_DIR, { recursive: true, force: true });
             fs.mkdirSync(AUTH_DIR, { recursive: true });
           } catch (e) {}
-          scheduleReconnect(3000);
+          console.log('[WhatsApp] Sesi keluar (logged out). Buka menu WhatsApp di Dashboard Admin untuk scan ulang.');
+        } else if (!isRegistered) {
+          console.log(`[WhatsApp] QR timeout / belum di-scan (kode ${statusCode || 'closed'}). Menunggu admin membuka menu WhatsApp.`);
+        } else if (shouldReconnect) {
+          const delays = [5000, 15000, 30000, 60000];
+          const delay = delays[Math.min(reconnectAttempts, delays.length - 1)];
+          reconnectAttempts += 1;
+          const now = Date.now();
+          if (reconnectAttempts <= 2 || now - lastDisconnectLogAt >= 60000) {
+            lastDisconnectLogAt = now;
+            console.log(`[WhatsApp] Koneksi terputus (kode ${statusCode}). Mencoba sambung ulang dalam ${delay / 1000}s...`);
+          }
+          scheduleReconnect(delay, false);
         }
       } else if (connection === 'open') {
+        reconnectAttempts = 0;
+        lastDisconnectLogAt = 0;
+        hasLoggedQrThisAttempt = false;
         console.log('✅ [WhatsApp] Bot Baileys berhasil TERHUBUNG!');
         connectionStatus = 'connected';
         currentQR = null;
@@ -100,9 +143,17 @@ async function initWhatsApp() {
 
   } catch (err) {
     console.error('[WhatsApp] Init error:', err.message);
-    scheduleReconnect(10000);
+    if (hasRegisteredSession()) {
+      scheduleReconnect(15000, false);
+    }
   } finally {
     isInitializing = false;
+  }
+}
+
+function startWhatsAppPairing() {
+  if (connectionStatus === 'disconnected' && !isInitializing) {
+    initWhatsApp({ forceQr: true });
   }
 }
 
@@ -269,7 +320,7 @@ async function logoutWhatsApp() {
     connectionStatus = 'disconnected';
     currentQR = null;
     db.prepare("UPDATE settings SET value = 'disconnected' WHERE key = 'wa_status'").run();
-    scheduleReconnect(2000);
+    scheduleReconnect(1500, true);
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
@@ -278,6 +329,7 @@ async function logoutWhatsApp() {
 
 module.exports = {
   initWhatsApp,
+  startWhatsAppPairing,
   getWAStatus,
   formatPhoneNumber,
   normalizePhoneLocal,

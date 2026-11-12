@@ -23,7 +23,7 @@ const {
   getEffectiveDueDate
 } = require('./mikrotik');
 const { runAutoIsolirCheck, startCronJobs } = require('./cron');
-const { initWhatsApp, getWAStatus, logoutWhatsApp, sendPaymentSuccessNotice, sendReminderHMinus3, sendReminderHPlus1, sendPromoNotice, sendWhatsAppMessage, sendNotificationToAdmin } = require('./wa');
+const { initWhatsApp, startWhatsAppPairing, getWAStatus, logoutWhatsApp, sendPaymentSuccessNotice, sendReminderHMinus3, sendReminderHPlus1, sendPromoNotice, sendWhatsAppMessage, sendNotificationToAdmin } = require('./wa');
 const { getTelegramConfig, testTelegramConnection, sendTelegramPhoto, backupDatabaseToTelegram, backupMikrotikToTelegram } = require('./telegram');
 
 const crypto = require('crypto');
@@ -673,6 +673,9 @@ app.get('/api/admin/editor-excel', (req, res) => {
 // === WHATSAPP GATEWAY ROUTES ===
 
 app.get('/api/admin/wa-status', (req, res) => {
+  if (req.query.start === '1') {
+    startWhatsAppPairing();
+  }
   res.json(getWAStatus());
 });
 

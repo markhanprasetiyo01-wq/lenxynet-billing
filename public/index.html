@@ -4302,9 +4302,9 @@
     // === WHATSAPP GATEWAY CLIENT LOGIC ===
     let waPollInterval = null;
 
-    async function checkWAStatus(manual = false) {
+    async function checkWAStatus(manual = false, startIfNeeded = false) {
       try {
-        const res = await fetch('/api/admin/wa-status');
+        const res = await fetch(startIfNeeded ? '/api/admin/wa-status?start=1' : '/api/admin/wa-status');
         const data = await res.json();
 
         const dot = document.getElementById('wa-dot');
@@ -4362,7 +4362,9 @@
           qrContainer.classList.add('hidden');
           connectedContainer.classList.add('hidden');
           spinner.classList.remove('hidden');
-          spinner.innerHTML = '<span class="text-rose-400 font-semibold">Bot WhatsApp belum aktif / memuat...</span>';
+          spinner.innerHTML = startIfNeeded
+            ? '<i class="fa-solid fa-spinner fa-spin text-2xl text-sky-400"></i><span class="text-slate-300 font-semibold">Menyiapkan QR Code WhatsApp...</span>'
+            : '<span class="text-slate-300 font-semibold">Bot WhatsApp belum terhubung.</span><button onclick="checkWAStatus(false, true)" class="mt-2 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5"><i class="fa-solid fa-qrcode"></i> Buat QR Code Baru</button>';
         }
 
         if (manual) showToast('Status WhatsApp diperbarui', 'info');
@@ -4373,7 +4375,7 @@
 
     function openWAModal() {
       document.getElementById('waModal').classList.remove('hidden');
-      checkWAStatus();
+      checkWAStatus(false, true);
       if (!waPollInterval) {
         waPollInterval = setInterval(checkWAStatus, 3000);
       }
