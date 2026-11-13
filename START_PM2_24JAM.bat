@@ -102,16 +102,22 @@ call pm2 start server.js --name "lenxynet" --max-memory-restart 500M --exp-backo
 echo 3. Menyimpan daftar proses PM2...
 call pm2 save
 
-echo 4. Memasang pm2-startup untuk Windows...
+echo 4. Memasang auto-startup Windows (PM2 Startup)...
 call npm install -g pm2-windows-startup >nul 2>&1
 call pm2-startup install >nul 2>&1
-call pm2 save
+
+echo 5. Memasang Watchdog Penjaga Ganda (Auto-Respawn jika PM2 dimatikan)...
+schtasks /create /tn "LenxyNet_PM2_Watchdog" /tr "cmd /c pm2 ping >nul 2>&1 || pm2 resurrect" /sc minute /mo 1 /ru "%USERNAME%" /f >nul 2>&1
+
+echo 6. Menyimpan konfigurasi aktif...
+call pm2 save >nul 2>&1
 
 echo(
 echo ========================================================
-echo [SUKSES] SERVER LENXYNET SEKARANG AKTIF 24 JAM!
+echo [SUKSES] SERVER LENXYNET SEKARANG AKTIF 24 JAM TOTAL!
 echo ========================================================
 echo - Jika server crash/error -> PM2 otomatis hidupkan ulang instan
+echo - Jika PM2 ter-kill di Task Manager -> Watchdog Windows hidupkan ulang dalam 1 menit
 echo - Jika PC restart / mati lampu -> Server otomatis nyala sendiri saat booting
 echo - Dashboard Admin : http://localhost:3000
 echo - Portal User     : http://localhost:3000/user.html
