@@ -254,13 +254,15 @@ Bisa diaktifkan / dijeda kapan saja lewat tombol saklar **Toggle Cron Job (ON/OF
 ## 🌐 Info Standar IP Pool PPPoE & Alternatif PC Windows
 
 * **IP Pool PPPoE:** Subnet `10.10.0.0/21` (Gateway `10.10.0.1`, rentang IP pelanggan `10.10.0.2 - 10.10.7.254` untuk **2.046 user**). Remote modem router pelanggan diakses via IP PPPoE port `80`.
-* **Alternatif PC Windows Baru:** Install [Node.js v22+ LTS](https://nodejs.org/) & [Git](https://git-scm.com/), lalu jalankan di PowerShell:
-  ```powershell
-  git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git
-  cd lenxynet-billing
-  npm install
-  node server.js
-  ```
+* **Alternatif PC Windows Baru (Satu Kali Klik):**
+  1. Install [Node.js v22+ LTS](https://nodejs.org/) & [Git](https://git-scm.com/).
+  2. Clone repo ini ke folder (misal `D:\Microtik_Management`):
+     ```powershell
+     git clone https://github.com/markhanprasetiyo01-wq/lenxynet-billing.git D:\Microtik_Management
+     ```
+  3. Taruh file `database.sqlite` Anda ke dalam folder tersebut.
+  4. **Jalankan Server:** Cukup **dobel klik `START_SERVER.bat`** (otomatis install npm jika belum ada).
+  5. **Pasang Cloudflare Tunnel (Opsional):** Klik kanan `PASANG_CLOUDFLARE.bat` $\rightarrow$ **Run as Administrator** (otomatis mengunduh `cloudflared.exe` & memasang service dengan token).
 
 ---
 Hak Cipta © 2026 **LenxyNet Billing & Management System** — `markhanprasetiyo01-wq`
