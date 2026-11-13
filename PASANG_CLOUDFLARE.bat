@@ -10,7 +10,7 @@ if errorlevel 1 (
     echo Silakan klik kanan file ini lalu pilih:
     echo "Run as Administrator" / "Jalankan sebagai administrator"
     echo ========================================================
-    echo.
+    echo(
     pause
     exit /b 1
 )
@@ -34,7 +34,7 @@ echo ========================================================
 echo        SETUP CLOUDFLARE TUNNEL (LENXYNET FIBER)
 echo ========================================================
 echo Lokasi Folder : %TARGET_DIR%
-echo.
+echo(
 
 REM 3. Cek file cloudflared.exe, unduh otomatis jika belum ada
 if not exist "cloudflared.exe" (
@@ -42,15 +42,15 @@ if not exist "cloudflared.exe" (
     echo Mengunduh cloudflared-windows-amd64.exe otomatis dari Cloudflare...
     curl.exe -L --progress-bar -o "cloudflared.exe" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
     if not exist "cloudflared.exe" (
-        echo.
+        echo(
         echo [ERROR] Gagal mengunduh cloudflared.exe!
         echo Pastikan komputer terhubung ke internet.
         pause
         exit /b 1
     )
-    echo.
+    echo(
     echo [SUKSES] cloudflared.exe berhasil diunduh ke folder project!
-    echo.
+    echo(
 )
 
 REM 4. Menu Pilihan
@@ -60,66 +60,75 @@ echo [2] Hapus / Uninstall Service Cloudflared Lama
 echo [3] Jalankan Tunnel Langsung di Jendela Ini (Tanpa Service)
 echo [4] Cek Status Service Cloudflared
 echo [5] Keluar
-echo.
+echo(
+set "CHOICE="
 set /p CHOICE="Pilihan Anda (1-5): "
 
-if "%CHOICE%"=="1" (
-    echo(
-    echo Silakan copy token dari Cloudflare Zero Trust [Tunnels ^> Overview]
-    set /p CF_TOKEN="Tempel (Paste) Token di sini: "
-    if "%CF_TOKEN%"=="" (
-        echo [ERROR] Token tidak boleh kosong!
-        pause
-        exit /b 1
-    )
-    echo(
-    echo Menghapus service lama jika ada...
-    cloudflared.exe service uninstall >nul 2>&1
-    echo Memasang service Cloudflared...
-    cloudflared.exe service install %CF_TOKEN%
-    echo Menyalakan service...
-    cloudflared.exe service start
-    echo(
-    echo ========================================================
-    echo [SUKSES] Service Cloudflare Tunnel telah aktif!
-    echo Silakan buka web di: https://lenxynet.store
-    echo ========================================================
-    pause
-    exit /b 0
-)
+if "%CHOICE%"=="1" goto DO_INSTALL
+if "%CHOICE%"=="2" goto DO_UNINSTALL
+if "%CHOICE%"=="3" goto DO_RUN
+if "%CHOICE%"=="4" goto DO_STATUS
+if "%CHOICE%"=="5" goto DO_EXIT
+echo Pilihan tidak valid.
+pause
+exit /b 0
 
-if "%CHOICE%"=="2" (
-    echo(
-    echo Menghentikan dan menghapus service Cloudflared...
-    cloudflared.exe service stop >nul 2>&1
-    cloudflared.exe service uninstall
-    echo [SUKSES] Service Cloudflared berhasil dihapus.
+:DO_INSTALL
+echo(
+echo Silakan copy token dari Cloudflare Zero Trust [Tunnels ^> Overview]
+set "CF_TOKEN="
+set /p CF_TOKEN="Tempel (Paste) Token di sini: "
+if not defined CF_TOKEN (
+    echo [ERROR] Token tidak boleh kosong!
     pause
-    exit /b 0
+    exit /b 1
 )
+echo(
+echo Menghapus service lama jika ada...
+cloudflared.exe service uninstall >nul 2>&1
+echo Memasang service Cloudflared...
+cloudflared.exe service install %CF_TOKEN%
+echo Menyalakan service...
+cloudflared.exe service start
+echo(
+echo ========================================================
+echo [SUKSES] Service Cloudflare Tunnel telah aktif!
+echo Silakan buka web di: https://lenxynet.store
+echo ========================================================
+pause
+exit /b 0
 
-if "%CHOICE%"=="3" (
-    echo(
-    set /p CF_TOKEN="Tempel (Paste) Token di sini: "
-    if "%CF_TOKEN%"=="" (
-        echo [ERROR] Token tidak boleh kosong!
-        pause
-        exit /b 1
-    )
-    cls
-    echo Menjalankan Cloudflare Tunnel secara langsung...
-    echo [Tekan Ctrl + C untuk mematikan tunnel]
-    cloudflared.exe tunnel run --token %CF_TOKEN%
+:DO_UNINSTALL
+echo(
+echo Menghentikan dan menghapus service Cloudflared...
+cloudflared.exe service stop >nul 2>&1
+cloudflared.exe service uninstall
+echo [SUKSES] Service Cloudflared berhasil dihapus.
+pause
+exit /b 0
+
+:DO_RUN
+echo(
+set "CF_TOKEN="
+set /p CF_TOKEN="Tempel (Paste) Token di sini: "
+if not defined CF_TOKEN (
+    echo [ERROR] Token tidak boleh kosong!
     pause
-    exit /b 0
+    exit /b 1
 )
+cls
+echo Menjalankan Cloudflare Tunnel secara langsung...
+echo [Tekan Ctrl + C untuk mematikan tunnel]
+cloudflared.exe tunnel run --token %CF_TOKEN%
+pause
+exit /b 0
 
-if "%CHOICE%"=="4" (
-    echo.
-    sc query Cloudflared
-    echo.
-    pause
-    exit /b 0
-)
+:DO_STATUS
+echo(
+sc query Cloudflared
+echo(
+pause
+exit /b 0
 
+:DO_EXIT
 exit /b 0
